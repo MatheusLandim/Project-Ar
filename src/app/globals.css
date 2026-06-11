@@ -1,0 +1,118 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===== Tema claro (padrão) ===== */
+:root {
+  --c-bg: 237 242 247;        /* #EDF2F7 */
+  --c-surface: 255 255 255;
+  --c-line: 222 230 240;
+  --c-ink: 13 27 42;          /* navy texto */
+  --c-ink-soft: 71 90 112;
+  --c-ink-faint: 140 158 180;
+  --c-brand: 62 124 177;      /* azul da marca #3E7CB1 */
+  --c-brand-dark: 44 92 138;
+  --c-brand-soft: 224 238 248;
+  --c-navy: 16 35 54;         /* azul-marinho profundo */
+  --glass-bg: 255 255 255;
+  --glass-alpha: 0.72;
+  --shadow-card: 0 1px 2px rgb(13 27 42 / 0.04), 0 12px 30px -16px rgb(13 27 42 / 0.18);
+  color-scheme: light;
+}
+
+/* ===== Tema escuro ===== */
+.dark {
+  --c-bg: 8 17 28;            /* #08111C marinho profundo */
+  --c-surface: 17 31 48;      /* #111F30 */
+  --c-line: 38 56 78;
+  --c-ink: 226 236 246;
+  --c-ink-soft: 156 178 202;
+  --c-ink-faint: 105 128 152;
+  --c-brand: 96 162 219;      /* azul mais claro no escuro */
+  --c-brand-dark: 62 124 177;
+  --c-brand-soft: 28 47 70;
+  --c-navy: 6 14 24;
+  --glass-bg: 22 38 58;
+  --glass-alpha: 0.55;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 18px 40px -18px rgb(0 0 0 / 0.6);
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: rgb(var(--c-bg));
+  color: rgb(var(--c-ink));
+}
+body {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background-color 0.4s ease, color 0.4s ease;
+}
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Fundo com brilho sutil da marca */
+.app-bg {
+  position: relative;
+  min-height: 100vh;
+}
+.app-bg::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(60rem 40rem at 80% -10%, rgb(var(--c-brand) / 0.16), transparent 60%),
+    radial-gradient(50rem 35rem at -10% 10%, rgb(var(--c-brand) / 0.1), transparent 55%);
+  z-index: 0;
+}
+
+/* Vidro (glassmorphism) */
+.glass {
+  background: rgb(var(--glass-bg) / var(--glass-alpha));
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  border: 1px solid rgb(var(--c-line) / 0.7);
+}
+.glass-strong {
+  background: rgb(var(--glass-bg) / 0.85);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  border: 1px solid rgb(var(--c-line) / 0.8);
+}
+
+/* Números alinhados (financeiro) */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--c-ink-faint) / 0.4);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+input,
+select,
+textarea {
+  outline: none;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  box-shadow: 0 0 0 3px rgb(var(--c-brand) / 0.25);
+  border-color: rgb(var(--c-brand));
+}
+
+/* Transição suave geral em cores */
+.t-colors {
+  transition: background-color 0.25s ease, border-color 0.25s ease,
+    color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+}
