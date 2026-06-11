@@ -21,10 +21,12 @@ export type ProjetoInput = {
 
 export function ProjectForm({
   initial,
+  clientes = [],
   onCancel,
   onSave,
 }: {
   initial?: Projeto;
+  clientes?: { id: string; nome: string }[];
   onCancel: () => void;
   onSave: (data: ProjetoInput) => Promise<void>;
 }) {
@@ -99,11 +101,17 @@ export function ProjectForm({
               <Field label="Cliente" required>
                 <input
                   required
+                  list="clientes-lista"
                   value={cliente}
                   onChange={(e) => setCliente(e.target.value)}
                   className={input}
                   placeholder="Ex.: Condomínio Solar"
                 />
+                <datalist id="clientes-lista">
+                  {clientes.map((c) => (
+                    <option key={c.id} value={c.nome} />
+                  ))}
+                </datalist>
               </Field>
               <Field label="Projeto / Obra" required>
                 <input

@@ -6,6 +6,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 export type View =
   | "overview"
   | "obras"
+  | "clientes"
   | "pagamentos"
   | "rt"
   | "documentos";
@@ -17,6 +18,7 @@ const ITEMS: {
 }[] = [
   { id: "overview", label: "Visão geral", icon: <IconGrid /> },
   { id: "obras", label: "Obras", icon: <IconBuilding /> },
+  { id: "clientes", label: "Clientes", icon: <IconUsers /> },
   { id: "pagamentos", label: "Recebimentos", icon: <IconCash /> },
   { id: "rt", label: "RT / ART", icon: <IconBadge /> },
   { id: "documentos", label: "Documentos", icon: <IconDoc /> },
@@ -157,6 +159,15 @@ function IconBadge() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
       <path d="M12 2l2.9 2.1 3.5-.4 1.1 3.4 2.9 2-1.4 3.3 1.4 3.3-2.9 2-1.1 3.4-3.5-.4L12 22l-2.9-2.1-3.5.4-1.1-3.4-2.9-2L3 11.6 1.6 8.3l2.9-2 1.1-3.4 3.5.4L12 2z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconUsers() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <circle cx="9" cy="8" r="3.2" stroke="currentColor" strokeWidth="2" />
+      <path d="M3.5 19a5.5 5.5 0 0 1 11 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M16 5.2a3.2 3.2 0 0 1 0 5.6M17.5 19a5.5 5.5 0 0 0-2-4.3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }

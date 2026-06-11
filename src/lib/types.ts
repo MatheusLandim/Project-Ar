@@ -19,9 +19,23 @@ export type Anexo = {
   criado_em: string;
 };
 
+export type Cliente = {
+  id: string;
+  nome: string;
+  tipo_pessoa: string | null;
+  documento: string | null;
+  email: string | null;
+  telefone: string | null;
+  contato: string | null;
+  endereco: string | null;
+  observacoes: string | null;
+  criado_em: string;
+};
+
 export type Projeto = {
   id: string;
   cliente: string;
+  cliente_id: string | null;
   projeto: string;
   tipo: string | null;
   endereco: string | null;

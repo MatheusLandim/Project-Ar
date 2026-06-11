@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Projeto, pagamentoStatus } from "@/lib/types";
+import { Projeto, Cliente, pagamentoStatus } from "@/lib/types";
 import { Logo } from "@/components/Logo";
 import { Sidebar, View } from "@/components/Sidebar";
 import { ProjectForm, ProjetoInput } from "@/components/ProjectForm";
+import { ClienteForm, ClienteInput } from "@/components/ClienteForm";
 import { OverviewView } from "@/components/views/OverviewView";
 import { ObrasView } from "@/components/views/ObrasView";
+import { ClientesView } from "@/components/views/ClientesView";
 import { PagamentosView } from "@/components/views/PagamentosView";
 import { RtView } from "@/components/views/RtView";
 import { DocumentosView } from "@/components/views/DocumentosView";
@@ -16,6 +18,7 @@ import { DocumentosView } from "@/components/views/DocumentosView";
 const TITULOS: Record<View, { t: string; s: string }> = {
   overview: { t: "Visão geral", s: "Resumo de contratos, recebimentos e alertas." },
   obras: { t: "Obras", s: "Seus projetos e contratos." },
+  clientes: { t: "Clientes", s: "Ficha de cada cliente e o que já contratou." },
   pagamentos: { t: "Recebimentos", s: "Tudo o que você recebe pelas obras, em um só lugar." },
   rt: { t: "RT / ART", s: "Taxas de responsabilidade técnica que você paga." },
   documentos: { t: "Documentos", s: "Notas fiscais e boletos anexados." },
@@ -26,6 +29,7 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
   const supabase = createClient();
 
   const [projetos, setProjetos] = useState<Projeto[]>([]);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -33,17 +37,25 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Projeto | undefined>(undefined);
+  const [showClienteForm, setShowClienteForm] = useState(false);
+  const [editingCliente, setEditingCliente] = useState<Cliente | undefined>(
+    undefined
+  );
 
   const load = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("projetos")
-      .select("*, pagamentos(*), anexos(*)")
-      .order("criado_em", { ascending: false });
-    if (error) setErro(error.message);
+    const [proj, cli] = await Promise.all([
+      supabase
+        .from("projetos")
+        .select("*, pagamentos(*), anexos(*)")
+        .order("criado_em", { ascending: false }),
+      supabase.from("clientes").select("*").order("nome"),
+    ]);
+    if (proj.error) setErro(proj.error.message);
     else {
-      setProjetos((data as Projeto[]) ?? []);
+      setProjetos((proj.data as Projeto[]) ?? []);
       setErro(null);
     }
+    if (!cli.error) setClientes((cli.data as Cliente[]) ?? []);
     setLoading(false);
   }, [supabase]);
 
@@ -51,11 +63,41 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
     load();
   }, [load]);
 
+  // Garante que o cliente exista no cadastro (cria se for novo) e devolve o id
+  async function resolverClienteId(nome: string): Promise<string | null> {
+    const alvo = nome.trim().toLowerCase();
+    if (!alvo) return null;
+    const existente = clientes.find((c) => c.nome.trim().toLowerCase() === alvo);
+    if (existente) return existente.id;
+    const { data } = await supabase
+      .from("clientes")
+      .insert({ nome: nome.trim() })
+      .select("id")
+      .single();
+    return data?.id ?? null;
+  }
+
   async function salvar(input: ProjetoInput) {
-    if (editing) await supabase.from("projetos").update(input).eq("id", editing.id);
-    else await supabase.from("projetos").insert(input);
+    const cliente_id = await resolverClienteId(input.cliente);
+    const payload = { ...input, cliente_id };
+    if (editing) await supabase.from("projetos").update(payload).eq("id", editing.id);
+    else await supabase.from("projetos").insert(payload);
     setShowForm(false);
     setEditing(undefined);
+    await load();
+  }
+
+  async function salvarCliente(input: ClienteInput) {
+    if (editingCliente)
+      await supabase.from("clientes").update(input).eq("id", editingCliente.id);
+    else await supabase.from("clientes").insert(input);
+    setShowClienteForm(false);
+    setEditingCliente(undefined);
+    await load();
+  }
+
+  async function excluirCliente(c: Cliente) {
+    await supabase.from("clientes").delete().eq("id", c.id);
     await load();
   }
 
@@ -72,6 +114,14 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
   function editarObra(p: Projeto) {
     setEditing(p);
     setShowForm(true);
+  }
+  function novoCliente() {
+    setEditingCliente(undefined);
+    setShowClienteForm(true);
+  }
+  function editarCliente(c: Cliente) {
+    setEditingCliente(c);
+    setShowClienteForm(true);
   }
   function irPara(v: View) {
     setView(v);
@@ -147,6 +197,14 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
               onNew={novaObra}
               onEdit={editarObra}
             />
+          ) : view === "clientes" ? (
+            <ClientesView
+              clientes={clientes}
+              projetos={projetos}
+              onNew={novoCliente}
+              onEdit={editarCliente}
+              onDelete={excluirCliente}
+            />
           ) : view === "pagamentos" ? (
             <PagamentosView projetos={projetos} reload={load} />
           ) : view === "rt" ? (
@@ -160,11 +218,23 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
       {showForm && (
         <ProjectForm
           initial={editing}
+          clientes={clientes}
           onCancel={() => {
             setShowForm(false);
             setEditing(undefined);
           }}
           onSave={salvar}
+        />
+      )}
+
+      {showClienteForm && (
+        <ClienteForm
+          initial={editingCliente}
+          onCancel={() => {
+            setShowClienteForm(false);
+            setEditingCliente(undefined);
+          }}
+          onSave={salvarCliente}
         />
       )}
     </div>
