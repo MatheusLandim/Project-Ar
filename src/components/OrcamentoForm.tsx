@@ -210,7 +210,7 @@ export function OrcamentoForm({
               <span className="flex-1 text-[11px] font-medium text-ink-faint">
                 Descrição do serviço
               </span>
-              <span className="w-36 text-[11px] font-medium text-ink-faint">
+              <span className="w-32 text-[11px] font-medium text-ink-faint">
                 Valor (R$)
               </span>
               <span className="w-8" />
@@ -222,7 +222,7 @@ export function OrcamentoForm({
                     value={it.descricao}
                     onChange={(e) => setItem(it._id, "descricao", e.target.value)}
                     placeholder="Ex.: Projeto de Climatização"
-                    className={`${input} flex-1`}
+                    className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-2.5 text-sm text-ink"
                   />
                   <input
                     type="number"
@@ -231,7 +231,7 @@ export function OrcamentoForm({
                     value={it.valor || ""}
                     onChange={(e) => setItem(it._id, "valor", e.target.value)}
                     placeholder="0,00"
-                    className={`${input} tnum w-36`}
+                    className="tnum w-32 shrink-0 rounded-lg border border-line bg-surface px-3 py-2.5 text-sm text-ink"
                   />
                   <button
                     type="button"
