@@ -11,7 +11,9 @@ export type ProjetoInput = {
   endereco: string | null;
   engenharia: string | null;
   rt_percentual: number;
-  art_percentual: number;
+  art_valor: number;
+  rt_obs: string | null;
+  art_obs: string | null;
   valor_total: number;
   status: string;
   data_inicio: string | null;
@@ -39,8 +41,10 @@ export function ProjectForm({
     initial?.rt_percentual ? String(initial.rt_percentual) : ""
   );
   const [art, setArt] = useState(
-    initial?.art_percentual ? String(initial.art_percentual) : ""
+    initial?.art_valor ? String(initial.art_valor) : ""
   );
+  const [rtObs, setRtObs] = useState(initial?.rt_obs ?? "");
+  const [artObs, setArtObs] = useState(initial?.art_obs ?? "");
   const [valor, setValor] = useState(
     initial ? String(initial.valor_total) : ""
   );
@@ -52,8 +56,7 @@ export function ProjectForm({
 
   const rtValor =
     (Number(valor) || 0) * ((Number(rt) || 0) / 100);
-  const artValorCalc =
-    (Number(valor) || 0) * ((Number(art) || 0) / 100);
+  const artValorCalc = Number(art) || 0;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -65,7 +68,9 @@ export function ProjectForm({
       endereco: endereco.trim() || null,
       engenharia: engenharia.trim() || null,
       rt_percentual: Number(rt) || 0,
-      art_percentual: Number(art) || 0,
+      art_valor: Number(art) || 0,
+      rt_obs: rtObs.trim() || null,
+      art_obs: artObs.trim() || null,
       valor_total: Number(valor) || 0,
       status,
       data_inicio: inicio || null,
@@ -184,23 +189,40 @@ export function ProjectForm({
                     placeholder="Ex.: 10"
                   />
                 </Field>
-                <Field label="ART — Anotação de Resp. Técnica (%)">
+                <Field label="ART — valor cobrado pelo engenheiro (R$)">
                   <input
                     type="number"
                     step="0.01"
                     min="0"
-                    max="100"
                     value={art}
                     onChange={(e) => setArt(e.target.value)}
                     className={`${input} tnum`}
-                    placeholder="Ex.: 5"
+                    placeholder="Ex.: 350,00"
                   />
                 </Field>
               </div>
             </div>
-            {(Number(rt) > 0 || Number(art) > 0) && Number(valor) > 0 && (
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="RT — a quem pagar / dados (PIX, banco)">
+                <input
+                  value={rtObs ?? ""}
+                  onChange={(e) => setRtObs(e.target.value)}
+                  className={input}
+                  placeholder="Ex.: CREA-SP · PIX 12.345.678/0001-90"
+                />
+              </Field>
+              <Field label="ART — a quem pagar / dados (PIX, banco)">
+                <input
+                  value={artObs ?? ""}
+                  onChange={(e) => setArtObs(e.target.value)}
+                  className={input}
+                  placeholder="Ex.: Eng. João · PIX joao@email.com"
+                />
+              </Field>
+            </div>
+            {((Number(rt) > 0 && Number(valor) > 0) || Number(art) > 0) && (
               <div className="mt-2 space-y-1.5">
-                {Number(rt) > 0 && (
+                {Number(rt) > 0 && Number(valor) > 0 && (
                   <p className="rounded-lg bg-brand-soft px-3 py-2 text-sm text-brand-dark">
                     RT a pagar ({rt}%):{" "}
                     <strong className="tnum">{brl(rtValor)}</strong>
@@ -208,7 +230,7 @@ export function ProjectForm({
                 )}
                 {Number(art) > 0 && (
                   <p className="rounded-lg bg-brand-soft px-3 py-2 text-sm text-brand-dark">
-                    ART a pagar ({art}%):{" "}
+                    ART a pagar:{" "}
                     <strong className="tnum">{brl(artValorCalc)}</strong>
                   </p>
                 )}

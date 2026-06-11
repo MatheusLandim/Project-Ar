@@ -112,53 +112,67 @@ export function ProjectCard({
 
       {/* RT */}
       {Number(projeto.rt_percentual) > 0 && (
-        <div className="mx-4 mb-1 flex items-center justify-between rounded-lg bg-sky-500/10 px-3 py-2 sm:mx-5">
-          <span className="text-xs text-ink-soft">
-            RT ({projeto.rt_percentual}%):{" "}
-            <strong className="tnum text-ink">{brl(rt)}</strong>
-            {projeto.rt_pago && projeto.rt_data_pagamento && (
-              <span className="text-emerald-500">
-                {" "}
-                · pago {formatDate(projeto.rt_data_pagamento)}
-              </span>
-            )}
-          </span>
-          <button
-            onClick={toggleRtPago}
-            className={`t-colors rounded-md px-2 py-1 text-xs font-medium ${
-              projeto.rt_pago
-                ? "text-ink-soft hover:bg-ink/5"
-                : "bg-sky-600 text-white hover:bg-sky-700"
-            }`}
-          >
-            {projeto.rt_pago ? "RT em aberto" : "Marcar RT pago"}
-          </button>
+        <div className="mx-4 mb-1 rounded-lg bg-sky-500/10 px-3 py-2 sm:mx-5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-ink-soft">
+              RT ({projeto.rt_percentual}%):{" "}
+              <strong className="tnum text-ink">{brl(rt)}</strong>
+              {projeto.rt_pago && projeto.rt_data_pagamento && (
+                <span className="text-emerald-500">
+                  {" "}
+                  · pago {formatDate(projeto.rt_data_pagamento)}
+                </span>
+              )}
+            </span>
+            <button
+              onClick={toggleRtPago}
+              className={`t-colors rounded-md px-2 py-1 text-xs font-medium ${
+                projeto.rt_pago
+                  ? "text-ink-soft hover:bg-ink/5"
+                  : "bg-sky-600 text-white hover:bg-sky-700"
+              }`}
+            >
+              {projeto.rt_pago ? "RT em aberto" : "Marcar RT pago"}
+            </button>
+          </div>
+          {projeto.rt_obs && (
+            <p className="mt-1 text-xs text-ink-faint">
+              Pagar a: {projeto.rt_obs}
+            </p>
+          )}
         </div>
       )}
 
       {/* ART */}
-      {Number(projeto.art_percentual) > 0 && (
-        <div className="mx-4 mb-1 flex items-center justify-between rounded-lg bg-sky-500/10 px-3 py-2 sm:mx-5">
-          <span className="text-xs text-ink-soft">
-            ART ({projeto.art_percentual}%):{" "}
-            <strong className="tnum text-ink">{brl(art)}</strong>
-            {projeto.art_pago && projeto.art_data_pagamento && (
-              <span className="text-emerald-500">
-                {" "}
-                · pago {formatDate(projeto.art_data_pagamento)}
-              </span>
-            )}
-          </span>
-          <button
-            onClick={toggleArtPago}
-            className={`t-colors rounded-md px-2 py-1 text-xs font-medium ${
-              projeto.art_pago
-                ? "text-ink-soft hover:bg-ink/5"
-                : "bg-sky-600 text-white hover:bg-sky-700"
-            }`}
-          >
-            {projeto.art_pago ? "ART em aberto" : "Marcar ART pago"}
-          </button>
+      {Number(projeto.art_valor) > 0 && (
+        <div className="mx-4 mb-1 rounded-lg bg-sky-500/10 px-3 py-2 sm:mx-5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-ink-soft">
+              ART (engenheiro):{" "}
+              <strong className="tnum text-ink">{brl(art)}</strong>
+              {projeto.art_pago && projeto.art_data_pagamento && (
+                <span className="text-emerald-500">
+                  {" "}
+                  · pago {formatDate(projeto.art_data_pagamento)}
+                </span>
+              )}
+            </span>
+            <button
+              onClick={toggleArtPago}
+              className={`t-colors rounded-md px-2 py-1 text-xs font-medium ${
+                projeto.art_pago
+                  ? "text-ink-soft hover:bg-ink/5"
+                  : "bg-sky-600 text-white hover:bg-sky-700"
+              }`}
+            >
+              {projeto.art_pago ? "ART em aberto" : "Marcar ART pago"}
+            </button>
+          </div>
+          {projeto.art_obs && (
+            <p className="mt-1 text-xs text-ink-faint">
+              Pagar a: {projeto.art_obs}
+            </p>
+          )}
         </div>
       )}
 

@@ -116,3 +116,35 @@ textarea:focus {
   transition: background-color 0.25s ease, border-color 0.25s ease,
     color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
 }
+
+/* ===== Impressão do orçamento (PDF) ===== */
+@page {
+  size: A4;
+  margin: 0;
+}
+@media print {
+  html,
+  body {
+    background: #fff !important;
+  }
+  body * {
+    visibility: hidden !important;
+  }
+  #orc-print,
+  #orc-print * {
+    visibility: visible !important;
+  }
+  #orc-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 210mm;
+  }
+  .orc-page {
+    break-after: page;
+    page-break-after: always;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

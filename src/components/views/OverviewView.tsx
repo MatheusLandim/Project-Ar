@@ -55,7 +55,7 @@ export function OverviewView({
     const rtApagar = projetos.reduce((s, p) => {
       let v = 0;
       if (Number(p.rt_percentual) > 0 && !p.rt_pago) v += rtValor(p);
-      if (Number(p.art_percentual) > 0 && !p.art_pago) v += artValor(p);
+      if (Number(p.art_valor) > 0 && !p.art_pago) v += artValor(p);
       return s + v;
     }, 0);
 

@@ -3,14 +3,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Projeto, Cliente, pagamentoStatus } from "@/lib/types";
+import { Projeto, Cliente, Orcamento, totalOrcamento, pagamentoStatus } from "@/lib/types";
 import { Logo } from "@/components/Logo";
 import { Sidebar, View } from "@/components/Sidebar";
 import { ProjectForm, ProjetoInput } from "@/components/ProjectForm";
 import { ClienteForm, ClienteInput } from "@/components/ClienteForm";
+import { OrcamentoForm, OrcamentoInput } from "@/components/OrcamentoForm";
+import { OrcamentoViewer } from "@/components/OrcamentoViewer";
 import { OverviewView } from "@/components/views/OverviewView";
 import { ObrasView } from "@/components/views/ObrasView";
 import { ClientesView } from "@/components/views/ClientesView";
+import { OrcamentosView } from "@/components/views/OrcamentosView";
 import { PagamentosView } from "@/components/views/PagamentosView";
 import { RtView } from "@/components/views/RtView";
 import { DocumentosView } from "@/components/views/DocumentosView";
@@ -19,6 +22,7 @@ const TITULOS: Record<View, { t: string; s: string }> = {
   overview: { t: "Visão geral", s: "Resumo de contratos, recebimentos e alertas." },
   obras: { t: "Obras", s: "Seus projetos e contratos." },
   clientes: { t: "Clientes", s: "Ficha de cada cliente e o que já contratou." },
+  orcamentos: { t: "Orçamentos", s: "Crie propostas, gere o PDF e converta em obra." },
   pagamentos: { t: "Recebimentos", s: "Tudo o que você recebe pelas obras, em um só lugar." },
   rt: { t: "RT / ART", s: "Taxas de responsabilidade técnica que você paga." },
   documentos: { t: "Documentos", s: "Notas fiscais e boletos anexados." },
@@ -30,6 +34,7 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
 
   const [projetos, setProjetos] = useState<Projeto[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [orcamentos, setOrcamentos] = useState<Orcamento[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -41,14 +46,18 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
   const [editingCliente, setEditingCliente] = useState<Cliente | undefined>(
     undefined
   );
+  const [showOrcForm, setShowOrcForm] = useState(false);
+  const [editingOrc, setEditingOrc] = useState<Orcamento | undefined>(undefined);
+  const [viewingOrc, setViewingOrc] = useState<Orcamento | undefined>(undefined);
 
   const load = useCallback(async () => {
-    const [proj, cli] = await Promise.all([
+    const [proj, cli, orc] = await Promise.all([
       supabase
         .from("projetos")
         .select("*, pagamentos(*), anexos(*)")
         .order("criado_em", { ascending: false }),
       supabase.from("clientes").select("*").order("nome"),
+      supabase.from("orcamentos").select("*").order("criado_em", { ascending: false }),
     ]);
     if (proj.error) setErro(proj.error.message);
     else {
@@ -56,6 +65,7 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
       setErro(null);
     }
     if (!cli.error) setClientes((cli.data as Cliente[]) ?? []);
+    if (!orc.error) setOrcamentos((orc.data as Orcamento[]) ?? []);
     setLoading(false);
   }, [supabase]);
 
@@ -101,6 +111,55 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
     await load();
   }
 
+  const proximoNumero = `ORC-${String(orcamentos.length + 1).padStart(4, "0")}`;
+
+  async function salvarOrcamento(input: OrcamentoInput) {
+    const cliente_id = await resolverClienteId(input.cliente_nome);
+    const payload = { ...input, cliente_id };
+    if (editingOrc)
+      await supabase.from("orcamentos").update(payload).eq("id", editingOrc.id);
+    else await supabase.from("orcamentos").insert(payload);
+    setShowOrcForm(false);
+    setEditingOrc(undefined);
+    await load();
+  }
+
+  async function excluirOrcamento(o: Orcamento) {
+    await supabase.from("orcamentos").delete().eq("id", o.id);
+    await load();
+  }
+
+  async function converterOrcamento(o: Orcamento) {
+    const cliente_id = await resolverClienteId(o.cliente_nome);
+    const { data } = await supabase
+      .from("projetos")
+      .insert({
+        cliente: o.cliente_nome,
+        cliente_id,
+        projeto: o.titulo || "Projeto de Climatização",
+        valor_total: totalOrcamento(o),
+        status: "Aprovado",
+      })
+      .select("id")
+      .single();
+    if (data?.id)
+      await supabase
+        .from("orcamentos")
+        .update({ obra_id: data.id, status: "Aprovado" })
+        .eq("id", o.id);
+    await load();
+    setView("obras");
+  }
+
+  function novoOrcamento() {
+    setEditingOrc(undefined);
+    setShowOrcForm(true);
+  }
+  function editarOrcamento(o: Orcamento) {
+    setEditingOrc(o);
+    setShowOrcForm(true);
+  }
+
   async function sair() {
     await supabase.auth.signOut();
     router.push("/login");
@@ -136,7 +195,7 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
     const rt = projetos.filter(
       (p) =>
         (Number(p.rt_percentual) > 0 && !p.rt_pago) ||
-        (Number(p.art_percentual) > 0 && !p.art_pago)
+        (Number(p.art_valor) > 0 && !p.art_pago)
     ).length;
     return { pagamentos: atras || undefined, rt: rt || undefined };
   }, [projetos]);
@@ -205,6 +264,16 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
               onEdit={editarCliente}
               onDelete={excluirCliente}
             />
+          ) : view === "orcamentos" ? (
+            <OrcamentosView
+              orcamentos={orcamentos}
+              reload={load}
+              onNew={novoOrcamento}
+              onEdit={editarOrcamento}
+              onView={(o) => setViewingOrc(o)}
+              onConvert={converterOrcamento}
+              onDelete={excluirOrcamento}
+            />
           ) : view === "pagamentos" ? (
             <PagamentosView projetos={projetos} reload={load} />
           ) : view === "rt" ? (
@@ -236,6 +305,23 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
           }}
           onSave={salvarCliente}
         />
+      )}
+
+      {showOrcForm && (
+        <OrcamentoForm
+          initial={editingOrc}
+          clientes={clientes}
+          proximoNumero={proximoNumero}
+          onCancel={() => {
+            setShowOrcForm(false);
+            setEditingOrc(undefined);
+          }}
+          onSave={salvarOrcamento}
+        />
+      )}
+
+      {viewingOrc && (
+        <OrcamentoViewer orc={viewingOrc} onClose={() => setViewingOrc(undefined)} />
       )}
     </div>
   );

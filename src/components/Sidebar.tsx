@@ -7,6 +7,7 @@ export type View =
   | "overview"
   | "obras"
   | "clientes"
+  | "orcamentos"
   | "pagamentos"
   | "rt"
   | "documentos";
@@ -19,6 +20,7 @@ const ITEMS: {
   { id: "overview", label: "Visão geral", icon: <IconGrid /> },
   { id: "obras", label: "Obras", icon: <IconBuilding /> },
   { id: "clientes", label: "Clientes", icon: <IconUsers /> },
+  { id: "orcamentos", label: "Orçamentos", icon: <IconQuote /> },
   { id: "pagamentos", label: "Recebimentos", icon: <IconCash /> },
   { id: "rt", label: "RT / ART", icon: <IconBadge /> },
   { id: "documentos", label: "Documentos", icon: <IconDoc /> },
@@ -162,11 +164,18 @@ function IconBadge() {
     </svg>
   );
 }
+function IconQuote() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M6 3h9l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <path d="M14 3v5h5M8.5 13h7M8.5 17h7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
 function IconUsers() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <circle cx="9" cy="8" r="3.2" stroke="currentColor" strokeWidth="2" />
-      <path d="M3.5 19a5.5 5.5 0 0 1 11 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="9" cy="8" r="3.2" stroke="currentColor" strokeWidth="2" />      <path d="M3.5 19a5.5 5.5 0 0 1 11 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       <path d="M16 5.2a3.2 3.2 0 0 1 0 5.6M17.5 19a5.5 5.5 0 0 0-2-4.3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );

@@ -19,6 +19,49 @@ export type Anexo = {
   criado_em: string;
 };
 
+export type ItemOrcamento = { descricao: string; valor: number };
+
+export type Orcamento = {
+  id: string;
+  numero: string | null;
+  cliente_id: string | null;
+  cliente_nome: string;
+  titulo: string;
+  status: string;
+  intro: string | null;
+  escopo: string | null;
+  ambientes: string | null;
+  normas: string | null;
+  servicos: string | null;
+  revisoes: string | null;
+  nao_inclusos: string | null;
+  itens: ItemOrcamento[];
+  desconto: number | null;
+  condicoes_pagamento: string | null;
+  prazos: string | null;
+  validade_dias: number | null;
+  fecho: string | null;
+  signatario_nome: string | null;
+  signatario_cargo: string | null;
+  obra_id: string | null;
+  criado_em: string;
+};
+
+export function totalOrcamento(o: {
+  itens: ItemOrcamento[];
+  desconto: number | null;
+}): number {
+  const soma = (o.itens ?? []).reduce((s, i) => s + (Number(i.valor) || 0), 0);
+  return soma - (Number(o.desconto) || 0);
+}
+
+export const STATUS_ORCAMENTO = [
+  "Rascunho",
+  "Enviado",
+  "Aprovado",
+  "Recusado",
+] as const;
+
 export type Cliente = {
   id: string;
   nome: string;
@@ -43,9 +86,12 @@ export type Projeto = {
   rt_percentual: number | null;
   rt_pago: boolean | null;
   rt_data_pagamento: string | null;
+  rt_obs: string | null;
   art_percentual: number | null;
+  art_valor: number | null;
   art_pago: boolean | null;
   art_data_pagamento: string | null;
+  art_obs: string | null;
   valor_total: number;
   status: string;
   data_inicio: string | null;
@@ -119,5 +165,5 @@ export function rtValor(p: Projeto): number {
 }
 
 export function artValor(p: Projeto): number {
-  return (Number(p.valor_total) * (Number(p.art_percentual) || 0)) / 100;
+  return Number(p.art_valor) || 0;
 }

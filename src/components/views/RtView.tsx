@@ -13,6 +13,7 @@ type Linha = {
   valor: number;
   pago: boolean;
   data: string | null;
+  obs: string | null;
 };
 
 const FILTROS = [
@@ -43,17 +44,19 @@ export function RtView({
           valor: rtValor(p),
           pago: !!p.rt_pago,
           data: p.rt_data_pagamento,
+          obs: p.rt_obs,
         });
       }
-      if (Number(p.art_percentual) > 0) {
+      if (Number(p.art_valor) > 0) {
         all.push({
           key: p.id + "-art",
           projeto: p,
           tipo: "ART",
-          pct: Number(p.art_percentual),
+          pct: 0,
           valor: artValor(p),
           pago: !!p.art_pago,
           data: p.art_data_pagamento,
+          obs: p.art_obs,
         });
       }
     }
@@ -159,9 +162,14 @@ export function RtView({
                   </span>
                 </p>
                 <p className="text-xs text-ink-soft">
-                  {l.pct}% sobre {brl(Number(l.projeto.valor_total))}
+                  {l.tipo === "RT"
+                    ? `${l.pct}% sobre ${brl(Number(l.projeto.valor_total))}`
+                    : "Valor cobrado pelo engenheiro"}
                   {l.pago && l.data && <> · pago {formatDate(l.data)}</>}
                 </p>
+                {l.obs && (
+                  <p className="text-xs text-ink-faint">Pagar a: {l.obs}</p>
+                )}
               </div>
               <span className="tnum text-base font-bold text-ink">
                 {brl(l.valor)}
