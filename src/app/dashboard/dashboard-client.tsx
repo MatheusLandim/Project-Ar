@@ -3,18 +3,25 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Projeto, STATUS_PROJETO } from "@/lib/types";
+import { Projeto, pagamentoStatus } from "@/lib/types";
 import { Logo } from "@/components/Logo";
-import { ThemeToggle } from "@/components/ThemeToggle";
-import { Kpis } from "@/components/Kpis";
-import { ProjectCard } from "@/components/ProjectCard";
+import { Sidebar, View } from "@/components/Sidebar";
 import { ProjectForm, ProjetoInput } from "@/components/ProjectForm";
+import { OverviewView } from "@/components/views/OverviewView";
+import { ObrasView } from "@/components/views/ObrasView";
+import { PagamentosView } from "@/components/views/PagamentosView";
+import { RtView } from "@/components/views/RtView";
+import { DocumentosView } from "@/components/views/DocumentosView";
 
-export default function DashboardClient({
-  userEmail,
-}: {
-  userEmail: string;
-}) {
+const TITULOS: Record<View, { t: string; s: string }> = {
+  overview: { t: "Visão geral", s: "Resumo de contratos, recebimentos e alertas." },
+  obras: { t: "Obras", s: "Seus projetos e contratos." },
+  pagamentos: { t: "Pagamentos", s: "Todos os recebimentos em um só lugar." },
+  rt: { t: "RT a pagar", s: "Responsabilidade técnica por obra." },
+  documentos: { t: "Documentos", s: "Notas fiscais e boletos anexados." },
+};
+
+export default function DashboardClient({ userEmail }: { userEmail: string }) {
   const router = useRouter();
   const supabase = createClient();
 
@@ -22,9 +29,8 @@ export default function DashboardClient({
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
-  const [busca, setBusca] = useState("");
-  const [filtro, setFiltro] = useState<string>("Todos");
-
+  const [view, setView] = useState<View>("overview");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Projeto | undefined>(undefined);
 
@@ -33,7 +39,6 @@ export default function DashboardClient({
       .from("projetos")
       .select("*, pagamentos(*), anexos(*)")
       .order("criado_em", { ascending: false });
-
     if (error) setErro(error.message);
     else {
       setProjetos((data as Projeto[]) ?? []);
@@ -47,11 +52,8 @@ export default function DashboardClient({
   }, [load]);
 
   async function salvar(input: ProjetoInput) {
-    if (editing) {
-      await supabase.from("projetos").update(input).eq("id", editing.id);
-    } else {
-      await supabase.from("projetos").insert(input);
-    }
+    if (editing) await supabase.from("projetos").update(input).eq("id", editing.id);
+    else await supabase.from("projetos").insert(input);
     setShowForm(false);
     setEditing(undefined);
     await load();
@@ -63,113 +65,92 @@ export default function DashboardClient({
     router.refresh();
   }
 
-  const visiveis = useMemo(() => {
-    const q = busca.trim().toLowerCase();
-    return projetos.filter((p) => {
-      const okStatus = filtro === "Todos" || p.status === filtro;
-      const okBusca =
-        !q ||
-        p.cliente.toLowerCase().includes(q) ||
-        p.projeto.toLowerCase().includes(q) ||
-        (p.tipo ?? "").toLowerCase().includes(q) ||
-        (p.engenharia ?? "").toLowerCase().includes(q) ||
-        (p.endereco ?? "").toLowerCase().includes(q);
-      return okStatus && okBusca;
-    });
-  }, [projetos, busca, filtro]);
+  function novaObra() {
+    setEditing(undefined);
+    setShowForm(true);
+  }
+  function editarObra(p: Projeto) {
+    setEditing(p);
+    setShowForm(true);
+  }
+  function irPara(v: View) {
+    setView(v);
+    setSidebarOpen(false);
+  }
+
+  const counts = useMemo<Partial<Record<View, number>>>(() => {
+    let atras = 0;
+    for (const p of projetos)
+      for (const pg of p.pagamentos)
+        if (pagamentoStatus(pg) === "atrasado") atras++;
+    const rt = projetos.filter(
+      (p) => Number(p.rt_percentual) > 0 && !p.rt_pago
+    ).length;
+    return { pagamentos: atras || undefined, rt: rt || undefined };
+  }, [projetos]);
 
   return (
-    <div className="app-bg">
-      <header className="sticky top-0 z-30 border-b border-line glass">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <Logo />
-          <div className="flex items-center gap-2 sm:gap-3">
-            <span className="hidden text-sm text-ink-soft md:inline">
-              {userEmail}
-            </span>
-            <ThemeToggle />
-            <button
-              onClick={sair}
-              className="t-colors rounded-xl border border-line px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/5"
-            >
-              Sair
-            </button>
-          </div>
-        </div>
+    <div className="app-bg min-h-screen">
+      <Sidebar
+        active={view}
+        onSelect={irPara}
+        counts={counts}
+        userEmail={userEmail}
+        onSignOut={sair}
+        onNew={novaObra}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
+
+      {/* Topo mobile */}
+      <header className="glass sticky top-0 z-30 flex items-center justify-between border-b border-line px-4 py-3 lg:hidden">
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="grid h-9 w-9 place-items-center rounded-xl border border-line text-ink-soft"
+          aria-label="Abrir menu"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </button>
+        <Logo />
+        <button
+          onClick={novaObra}
+          className="grid h-9 w-9 place-items-center rounded-xl bg-brand text-white shadow-glow"
+          aria-label="Nova obra"
+        >
+          +
+        </button>
       </header>
 
-      <main className="relative z-10 mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
-        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-          <div>
+      <main className="relative z-10 lg:pl-72">
+        <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+          <div className="mb-6">
             <h1 className="font-display text-2xl font-extrabold tracking-tight text-ink">
-              Visão geral
+              {TITULOS[view].t}
             </h1>
-            <p className="text-sm text-ink-soft">
-              Acompanhe contratos, status, RT e recebimentos.
-            </p>
+            <p className="text-sm text-ink-soft">{TITULOS[view].s}</p>
           </div>
-          <button
-            onClick={() => {
-              setEditing(undefined);
-              setShowForm(true);
-            }}
-            className="t-colors inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-glow hover:bg-brand-dark"
-          >
-            <span className="text-base leading-none">+</span> Novo projeto
-          </button>
-        </div>
 
-        <Kpis projetos={projetos} />
-
-        <div className="mt-6 flex flex-wrap items-center gap-3">
-          <input
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar cliente, obra, engenharia, endereço…"
-            className="t-colors flex-1 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink sm:max-w-xs"
-          />
-          <div className="flex flex-wrap gap-1.5">
-            {["Todos", ...STATUS_PROJETO].map((s) => (
-              <button
-                key={s}
-                onClick={() => setFiltro(s)}
-                className={`t-colors rounded-full px-3 py-1.5 text-sm font-medium ${
-                  filtro === s
-                    ? "bg-ink text-canvas"
-                    : "glass text-ink-soft hover:text-ink"
-                }`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-5 space-y-4">
           {loading ? (
             <SkeletonList />
           ) : erro ? (
             <ErrorBox msg={erro} />
-          ) : visiveis.length === 0 ? (
-            <EmptyState
-              filtrando={busca !== "" || filtro !== "Todos"}
-              onNew={() => {
-                setEditing(undefined);
-                setShowForm(true);
-              }}
+          ) : view === "overview" ? (
+            <OverviewView projetos={projetos} onNavigate={irPara} />
+          ) : view === "obras" ? (
+            <ObrasView
+              projetos={projetos}
+              reload={load}
+              onNew={novaObra}
+              onEdit={editarObra}
             />
+          ) : view === "pagamentos" ? (
+            <PagamentosView projetos={projetos} reload={load} />
+          ) : view === "rt" ? (
+            <RtView projetos={projetos} reload={load} />
           ) : (
-            visiveis.map((p) => (
-              <ProjectCard
-                key={p.id}
-                projeto={p}
-                onChanged={load}
-                onEdit={(proj) => {
-                  setEditing(proj);
-                  setShowForm(true);
-                }}
-              />
-            ))
+            <DocumentosView projetos={projetos} reload={load} />
           )}
         </div>
       </main>
@@ -192,10 +173,7 @@ function SkeletonList() {
   return (
     <div className="space-y-4">
       {[0, 1, 2].map((i) => (
-        <div
-          key={i}
-          className="h-28 animate-pulse rounded-2xl glass"
-        />
+        <div key={i} className="h-28 animate-pulse rounded-2xl glass" />
       ))}
     </div>
   );
@@ -207,38 +185,8 @@ function ErrorBox({ msg }: { msg: string }) {
       <p className="font-semibold">Não foi possível carregar os dados.</p>
       <p className="mt-1 opacity-90">{msg}</p>
       <p className="mt-2 opacity-90">
-        Verifique se você rodou o SQL de atualização (migration.sql) no Supabase
-        e se as variáveis de ambiente estão corretas.
+        Verifique se você rodou o SQL de atualização (migration.sql) no Supabase.
       </p>
-    </div>
-  );
-}
-
-function EmptyState({
-  filtrando,
-  onNew,
-}: {
-  filtrando: boolean;
-  onNew: () => void;
-}) {
-  return (
-    <div className="rounded-2xl border border-dashed border-line glass p-10 text-center">
-      <p className="font-display text-lg font-bold text-ink">
-        {filtrando ? "Nenhum projeto encontrado" : "Comece seu primeiro projeto"}
-      </p>
-      <p className="mx-auto mt-1 max-w-sm text-sm text-ink-soft">
-        {filtrando
-          ? "Ajuste a busca ou o filtro de status para ver outros projetos."
-          : "Cadastre um contrato para acompanhar status, RT, pagamentos e documentos."}
-      </p>
-      {!filtrando && (
-        <button
-          onClick={onNew}
-          className="t-colors mt-4 inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-glow hover:bg-brand-dark"
-        >
-          + Novo projeto
-        </button>
-      )}
     </div>
   );
 }
