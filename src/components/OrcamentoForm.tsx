@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Overlay } from "@/components/ProjectForm";
 import { Orcamento, ItemOrcamento, STATUS_ORCAMENTO, totalOrcamento } from "@/lib/types";
 import { ORC_DEFAULTS } from "@/lib/orcamento-defaults";
@@ -48,10 +48,13 @@ export function OrcamentoForm({
   const [cliente, setCliente] = useState(initial?.cliente_nome ?? "");
   const [titulo, setTitulo] = useState(initial?.titulo ?? ORC_DEFAULTS.titulo);
   const [status, setStatus] = useState(initial?.status ?? "Rascunho");
-  const [itens, setItens] = useState<ItemOrcamento[]>(
-    initial?.itens?.length
-      ? initial.itens
-      : [{ descricao: "Projeto de Climatização", valor: 0 }]
+  const uid = useRef(1);
+  const [itens, setItens] = useState<(ItemOrcamento & { _id: number })[]>(
+    () =>
+      (initial?.itens?.length
+        ? initial.itens
+        : [{ descricao: "Projeto de Climatização", valor: 0 }]
+      ).map((it) => ({ ...it, _id: uid.current++ }))
   );
   const [desconto, setDesconto] = useState(
     initial ? String(initial.desconto ?? 0) : "0"
@@ -93,10 +96,10 @@ export function OrcamentoForm({
 
   const total = totalOrcamento({ itens, desconto: Number(desconto) || 0 });
 
-  function setItem(i: number, campo: keyof ItemOrcamento, v: string) {
+  function setItem(id: number, campo: keyof ItemOrcamento, v: string) {
     setItens((arr) =>
-      arr.map((it, idx) =>
-        idx === i
+      arr.map((it) =>
+        it._id === id
           ? { ...it, [campo]: campo === "valor" ? Number(v) || 0 : v }
           : it
       )
@@ -118,7 +121,9 @@ export function OrcamentoForm({
       servicos,
       revisoes,
       nao_inclusos: naoInclusos,
-      itens: itens.filter((i) => i.descricao.trim() || i.valor),
+      itens: itens
+        .filter((i) => i.descricao.trim() || i.valor)
+        .map(({ descricao, valor }) => ({ descricao, valor })),
       desconto: Number(desconto) || 0,
       condicoes_pagamento: condicoes,
       prazos,
@@ -198,16 +203,25 @@ export function OrcamentoForm({
 
           {/* Itens */}
           <div>
-            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">
               Itens do orçamento
             </p>
+            <div className="hidden gap-2 px-1 pb-1 sm:flex">
+              <span className="flex-1 text-[11px] font-medium text-ink-faint">
+                Descrição do serviço
+              </span>
+              <span className="w-36 text-[11px] font-medium text-ink-faint">
+                Valor (R$)
+              </span>
+              <span className="w-8" />
+            </div>
             <div className="space-y-2">
-              {itens.map((it, i) => (
-                <div key={i} className="flex gap-2">
+              {itens.map((it) => (
+                <div key={it._id} className="flex items-center gap-2">
                   <input
                     value={it.descricao}
-                    onChange={(e) => setItem(i, "descricao", e.target.value)}
-                    placeholder="Serviço"
+                    onChange={(e) => setItem(it._id, "descricao", e.target.value)}
+                    placeholder="Ex.: Projeto de Climatização"
                     className={`${input} flex-1`}
                   />
                   <input
@@ -215,15 +229,20 @@ export function OrcamentoForm({
                     step="0.01"
                     min="0"
                     value={it.valor || ""}
-                    onChange={(e) => setItem(i, "valor", e.target.value)}
+                    onChange={(e) => setItem(it._id, "valor", e.target.value)}
                     placeholder="0,00"
-                    className={`${input} tnum w-32`}
+                    className={`${input} tnum w-36`}
                   />
                   <button
                     type="button"
-                    onClick={() => setItens((a) => a.filter((_, idx) => idx !== i))}
-                    className="rounded-lg px-2 text-ink-faint hover:bg-ink/5"
-                    aria-label="Remover"
+                    onClick={() =>
+                      setItens((a) =>
+                        a.length > 1 ? a.filter((x) => x._id !== it._id) : a
+                      )
+                    }
+                    className="grid h-9 w-8 place-items-center rounded-lg text-ink-faint hover:bg-ink/5"
+                    aria-label="Remover item"
+                    title="Remover item"
                   >
                     ✕
                   </button>
@@ -232,10 +251,15 @@ export function OrcamentoForm({
             </div>
             <button
               type="button"
-              onClick={() => setItens((a) => [...a, { descricao: "", valor: 0 }])}
+              onClick={() =>
+                setItens((a) => [
+                  ...a,
+                  { descricao: "", valor: 0, _id: uid.current++ },
+                ])
+              }
               className="mt-2 rounded-lg border border-dashed border-brand/40 px-3 py-1.5 text-sm font-medium text-brand hover:bg-brand-soft"
             >
-              + Adicionar item
+              + Adicionar serviço
             </button>
           </div>
 
