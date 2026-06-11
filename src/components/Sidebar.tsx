@@ -17,8 +17,8 @@ const ITEMS: {
 }[] = [
   { id: "overview", label: "Visão geral", icon: <IconGrid /> },
   { id: "obras", label: "Obras", icon: <IconBuilding /> },
-  { id: "pagamentos", label: "Pagamentos", icon: <IconCash /> },
-  { id: "rt", label: "RT a pagar", icon: <IconBadge /> },
+  { id: "pagamentos", label: "Recebimentos", icon: <IconCash /> },
+  { id: "rt", label: "RT / ART", icon: <IconBadge /> },
   { id: "documentos", label: "Documentos", icon: <IconDoc /> },
 ];
 

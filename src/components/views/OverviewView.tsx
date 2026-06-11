@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Projeto, STATUS_PROJETO, pagamentoStatus, rtValor } from "@/lib/types";
+import { Projeto, STATUS_PROJETO, pagamentoStatus, rtValor, artValor } from "@/lib/types";
 import { brl, formatDate } from "@/lib/format";
 import { Kpis } from "@/components/Kpis";
 import { View } from "@/components/Sidebar";
@@ -52,9 +52,12 @@ export function OverviewView({
       (a.venc ?? "9999").localeCompare(b.venc ?? "9999")
     );
 
-    const rtApagar = projetos
-      .filter((p) => Number(p.rt_percentual) > 0 && !p.rt_pago)
-      .reduce((s, p) => s + rtValor(p), 0);
+    const rtApagar = projetos.reduce((s, p) => {
+      let v = 0;
+      if (Number(p.rt_percentual) > 0 && !p.rt_pago) v += rtValor(p);
+      if (Number(p.art_percentual) > 0 && !p.art_pago) v += artValor(p);
+      return s + v;
+    }, 0);
 
     const porStatus = STATUS_PROJETO.map((s) => ({
       status: s,
@@ -109,7 +112,7 @@ export function OverviewView({
                 ★
               </span>
               <div className="flex-1">
-                <p className="text-sm font-semibold text-ink">RT a pagar</p>
+                <p className="text-sm font-semibold text-ink">RT / ART a pagar</p>
                 <p className="tnum text-xs text-amber-500">
                   {brl(dados.rtApagar)} pendentes
                 </p>

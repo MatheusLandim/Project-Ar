@@ -11,7 +11,8 @@ export type Pagamento = {
 export type Anexo = {
   id: string;
   projeto_id: string;
-  tipo: string; // nota_fiscal | boleto | outro
+  tipo: string; // mantido por compatibilidade
+  pasta: string | null;
   nome: string;
   path: string;
   tamanho: number | null;
@@ -28,6 +29,9 @@ export type Projeto = {
   rt_percentual: number | null;
   rt_pago: boolean | null;
   rt_data_pagamento: string | null;
+  art_percentual: number | null;
+  art_pago: boolean | null;
+  art_data_pagamento: string | null;
   valor_total: number;
   status: string;
   data_inicio: string | null;
@@ -60,6 +64,31 @@ export const TIPOS_ANEXO: Record<string, string> = {
   outro: "Outro",
 };
 
+export const PASTAS_SUGERIDAS = [
+  "Projeto executado",
+  "Revisões",
+  "Atualizações",
+  "Notas Fiscais",
+  "Boletos",
+  "Contratos",
+  "Outros",
+];
+
+export function pastaDeAnexo(a: Anexo): string {
+  return a.pasta || TIPOS_ANEXO[a.tipo] || "Outros";
+}
+
+export function iconePasta(pasta: string | null): string {
+  const s = (pasta ?? "").toLowerCase();
+  if (s.includes("projeto")) return "📐";
+  if (s.includes("revis")) return "🔁";
+  if (s.includes("atualiz")) return "🆕";
+  if (s.includes("nota")) return "🧾";
+  if (s.includes("boleto")) return "📄";
+  if (s.includes("contrato")) return "📑";
+  return "📎";
+}
+
 export type PagamentoStatus = "pago" | "pendente" | "atrasado";
 
 export function pagamentoStatus(p: Pagamento): PagamentoStatus {
@@ -73,4 +102,8 @@ export function pagamentoStatus(p: Pagamento): PagamentoStatus {
 
 export function rtValor(p: Projeto): number {
   return (Number(p.valor_total) * (Number(p.rt_percentual) || 0)) / 100;
+}
+
+export function artValor(p: Projeto): number {
+  return (Number(p.valor_total) * (Number(p.art_percentual) || 0)) / 100;
 }

@@ -2,23 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Projeto, Anexo, TIPOS_ANEXO } from "@/lib/types";
+import { Projeto, Anexo, pastaDeAnexo, iconePasta } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 
-type Linha = Anexo & { _cliente: string; _projeto: string };
-
-const ICON: Record<string, string> = {
-  nota_fiscal: "🧾",
-  boleto: "📄",
-  outro: "📎",
-};
-
-const FILTROS = [
-  { id: "todos", label: "Todos" },
-  { id: "nota_fiscal", label: "Notas Fiscais" },
-  { id: "boleto", label: "Boletos" },
-  { id: "outro", label: "Outros" },
-];
+type Linha = Anexo & { _cliente: string; _projeto: string; _pasta: string };
 
 function tamanhoLegivel(bytes: number | null) {
   if (!bytes) return "";
@@ -35,20 +22,35 @@ export function DocumentosView({
   reload: () => void;
 }) {
   const supabase = createClient();
-  const [filtro, setFiltro] = useState("todos");
+  const [filtro, setFiltro] = useState("Todos");
   const [busca, setBusca] = useState("");
 
-  const linhas = useMemo<Linha[]>(() => {
+  const todas = useMemo<Linha[]>(() => {
     const all: Linha[] = [];
     for (const p of projetos) {
       for (const a of p.anexos ?? []) {
-        all.push({ ...a, _cliente: p.cliente, _projeto: p.projeto });
+        all.push({
+          ...a,
+          _cliente: p.cliente,
+          _projeto: p.projeto,
+          _pasta: pastaDeAnexo(a),
+        });
       }
     }
+    return all;
+  }, [projetos]);
+
+  const pastas = useMemo(() => {
+    const set = new Set<string>();
+    todas.forEach((l) => set.add(l._pasta));
+    return ["Todos", ...[...set].sort()];
+  }, [todas]);
+
+  const linhas = useMemo(() => {
     const q = busca.trim().toLowerCase();
-    return all
+    return todas
       .filter((l) => {
-        const okF = filtro === "todos" || l.tipo === filtro;
+        const okF = filtro === "Todos" || l._pasta === filtro;
         const okB =
           !q ||
           l.nome.toLowerCase().includes(q) ||
@@ -57,7 +59,7 @@ export function DocumentosView({
         return okF && okB;
       })
       .sort((a, b) => b.criado_em.localeCompare(a.criado_em));
-  }, [projetos, filtro, busca]);
+  }, [todas, filtro, busca]);
 
   async function abrir(path: string) {
     const { data, error } = await supabase.storage
@@ -82,17 +84,17 @@ export function DocumentosView({
           className="t-colors flex-1 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink sm:max-w-sm"
         />
         <div className="flex flex-wrap gap-1.5">
-          {FILTROS.map((f) => (
+          {pastas.map((f) => (
             <button
-              key={f.id}
-              onClick={() => setFiltro(f.id)}
+              key={f}
+              onClick={() => setFiltro(f)}
               className={`t-colors rounded-full px-3 py-1.5 text-sm font-medium ${
-                filtro === f.id
+                filtro === f
                   ? "bg-ink text-canvas"
                   : "glass text-ink-soft hover:text-ink"
               }`}
             >
-              {f.label}
+              {f}
             </button>
           ))}
         </div>
@@ -105,8 +107,8 @@ export function DocumentosView({
               Nenhum documento aqui
             </p>
             <p className="mt-1 text-sm text-ink-soft">
-              Anexe notas fiscais e boletos dentro de cada obra, na aba
-              Documentos.
+              Suba projetos, revisões, notas e boletos dentro de cada obra, na
+              aba Documentos.
             </p>
           </div>
         ) : (
@@ -116,7 +118,7 @@ export function DocumentosView({
               className="t-colors flex items-center gap-3 rounded-xl border border-line glass px-4 py-3 hover:border-brand/40"
             >
               <span className="text-xl leading-none">
-                {ICON[l.tipo] ?? "📎"}
+                {iconePasta(l._pasta)}
               </span>
               <button
                 onClick={() => abrir(l.path)}
@@ -127,7 +129,7 @@ export function DocumentosView({
                   {l.nome}
                 </p>
                 <p className="text-xs text-ink-faint">
-                  {TIPOS_ANEXO[l.tipo] ?? "Arquivo"} · {l._cliente} ·{" "}
+                  {l._pasta} · {l._cliente} ·{" "}
                   {formatDate(l.criado_em.slice(0, 10))}
                   {l.tamanho ? ` · ${tamanhoLegivel(l.tamanho)}` : ""}
                 </p>

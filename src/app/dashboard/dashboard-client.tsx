@@ -16,8 +16,8 @@ import { DocumentosView } from "@/components/views/DocumentosView";
 const TITULOS: Record<View, { t: string; s: string }> = {
   overview: { t: "Visão geral", s: "Resumo de contratos, recebimentos e alertas." },
   obras: { t: "Obras", s: "Seus projetos e contratos." },
-  pagamentos: { t: "Pagamentos", s: "Todos os recebimentos em um só lugar." },
-  rt: { t: "RT a pagar", s: "Responsabilidade técnica por obra." },
+  pagamentos: { t: "Recebimentos", s: "Tudo o que você recebe pelas obras, em um só lugar." },
+  rt: { t: "RT / ART", s: "Taxas de responsabilidade técnica que você paga." },
   documentos: { t: "Documentos", s: "Notas fiscais e boletos anexados." },
 };
 
@@ -84,7 +84,9 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
       for (const pg of p.pagamentos)
         if (pagamentoStatus(pg) === "atrasado") atras++;
     const rt = projetos.filter(
-      (p) => Number(p.rt_percentual) > 0 && !p.rt_pago
+      (p) =>
+        (Number(p.rt_percentual) > 0 && !p.rt_pago) ||
+        (Number(p.art_percentual) > 0 && !p.art_pago)
     ).length;
     return { pagamentos: atras || undefined, rt: rt || undefined };
   }, [projetos]);

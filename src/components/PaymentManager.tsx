@@ -61,7 +61,7 @@ export function PaymentManager({
   return (
     <div className="rounded-xl border border-line bg-canvas/40 p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h4 className="text-sm font-semibold text-ink">Pagamentos</h4>
+        <h4 className="text-sm font-semibold text-ink">Recebimentos</h4>
         <div className="flex items-center gap-3 text-xs text-ink-soft">
           <span className="tnum">
             Lançado: <strong className="text-ink">{brl(totalLancado)}</strong>
@@ -83,7 +83,7 @@ export function PaymentManager({
 
       {pagamentos.length === 0 && !adding && (
         <p className="py-2 text-sm text-ink-soft">
-          Nenhum pagamento lançado. Cadastre as parcelas ou a entrada deste
+          Nenhum recebimento lançado. Cadastre as parcelas ou a entrada deste
           projeto.
         </p>
       )}
@@ -103,7 +103,7 @@ export function PaymentManager({
                 <p className="text-xs text-ink-soft">
                   Vence {formatDate(p.data_vencimento)}
                   {p.data_pagamento && (
-                    <> · pago em {formatDate(p.data_pagamento)}</>
+                    <> · recebido em {formatDate(p.data_pagamento)}</>
                   )}
                 </p>
               </div>
@@ -120,7 +120,7 @@ export function PaymentManager({
                       : "bg-emerald-600 text-white hover:bg-emerald-700"
                   }`}
                 >
-                  {p.data_pagamento ? "Reabrir" : "Dar baixa"}
+                  {p.data_pagamento ? "Reabrir" : "Receber"}
                 </button>
                 <button
                   onClick={() => removePagamento(p.id)}
@@ -183,7 +183,7 @@ export function PaymentManager({
           onClick={() => setAdding(true)}
           className="t-colors mt-3 inline-flex items-center gap-1.5 rounded-lg border border-dashed border-brand/50 px-3 py-2 text-sm font-medium text-brand hover:bg-brand-soft"
         >
-          + Lançar pagamento
+          + Lançar recebimento
         </button>
       )}
     </div>

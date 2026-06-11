@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Projeto, STATUS_PROJETO, pagamentoStatus, rtValor } from "@/lib/types";
+import { Projeto, STATUS_PROJETO, pagamentoStatus, rtValor, artValor } from "@/lib/types";
 import { brl, formatDate, hoje } from "@/lib/format";
 import { StatusBadge } from "./StatusBadge";
 import { PaymentManager } from "./PaymentManager";
@@ -31,6 +31,7 @@ export function ProjectCard({
     (p) => pagamentoStatus(p) === "atrasado"
   );
   const rt = rtValor(projeto);
+  const art = artValor(projeto);
 
   async function mudarStatus(status: string) {
     await supabase.from("projetos").update({ status }).eq("id", projeto.id);
@@ -43,6 +44,17 @@ export function ProjectCard({
       .update({
         rt_pago: !projeto.rt_pago,
         rt_data_pagamento: !projeto.rt_pago ? hoje() : null,
+      })
+      .eq("id", projeto.id);
+    onChanged();
+  }
+
+  async function toggleArtPago() {
+    await supabase
+      .from("projetos")
+      .update({
+        art_pago: !projeto.art_pago,
+        art_data_pagamento: !projeto.art_pago ? hoje() : null,
       })
       .eq("id", projeto.id);
     onChanged();
@@ -120,6 +132,32 @@ export function ProjectCard({
             }`}
           >
             {projeto.rt_pago ? "RT em aberto" : "Marcar RT pago"}
+          </button>
+        </div>
+      )}
+
+      {/* ART */}
+      {Number(projeto.art_percentual) > 0 && (
+        <div className="mx-4 mb-1 flex items-center justify-between rounded-lg bg-sky-500/10 px-3 py-2 sm:mx-5">
+          <span className="text-xs text-ink-soft">
+            ART ({projeto.art_percentual}%):{" "}
+            <strong className="tnum text-ink">{brl(art)}</strong>
+            {projeto.art_pago && projeto.art_data_pagamento && (
+              <span className="text-emerald-500">
+                {" "}
+                · pago {formatDate(projeto.art_data_pagamento)}
+              </span>
+            )}
+          </span>
+          <button
+            onClick={toggleArtPago}
+            className={`t-colors rounded-md px-2 py-1 text-xs font-medium ${
+              projeto.art_pago
+                ? "text-ink-soft hover:bg-ink/5"
+                : "bg-sky-600 text-white hover:bg-sky-700"
+            }`}
+          >
+            {projeto.art_pago ? "ART em aberto" : "Marcar ART pago"}
           </button>
         </div>
       )}
@@ -211,7 +249,7 @@ export function ProjectCard({
                   : "text-ink-soft hover:text-ink"
               }`}
             >
-              Pagamentos
+              Recebimentos
             </button>
             <button
               onClick={() => setAba("doc")}

@@ -129,7 +129,7 @@ export function PagamentosView({
                       {l.descricao || "Pagamento"} · vence{" "}
                       {formatDate(l.data_vencimento)}
                       {l.data_pagamento && (
-                        <> · pago {formatDate(l.data_pagamento)}</>
+                        <> · recebido {formatDate(l.data_pagamento)}</>
                       )}
                     </p>
                   </div>
@@ -145,7 +145,7 @@ export function PagamentosView({
                         : "bg-emerald-600 text-white hover:bg-emerald-700"
                     }`}
                   >
-                    {l.data_pagamento ? "Reabrir" : "Dar baixa"}
+                    {l.data_pagamento ? "Reabrir" : "Receber"}
                   </button>
                 </li>
               );

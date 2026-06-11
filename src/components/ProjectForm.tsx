@@ -11,6 +11,7 @@ export type ProjetoInput = {
   endereco: string | null;
   engenharia: string | null;
   rt_percentual: number;
+  art_percentual: number;
   valor_total: number;
   status: string;
   data_inicio: string | null;
@@ -35,6 +36,9 @@ export function ProjectForm({
   const [rt, setRt] = useState(
     initial?.rt_percentual ? String(initial.rt_percentual) : ""
   );
+  const [art, setArt] = useState(
+    initial?.art_percentual ? String(initial.art_percentual) : ""
+  );
   const [valor, setValor] = useState(
     initial ? String(initial.valor_total) : ""
   );
@@ -46,6 +50,8 @@ export function ProjectForm({
 
   const rtValor =
     (Number(valor) || 0) * ((Number(rt) || 0) / 100);
+  const artValorCalc =
+    (Number(valor) || 0) * ((Number(art) || 0) / 100);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -57,6 +63,7 @@ export function ProjectForm({
       endereco: endereco.trim() || null,
       engenharia: engenharia.trim() || null,
       rt_percentual: Number(rt) || 0,
+      art_percentual: Number(art) || 0,
       valor_total: Number(valor) || 0,
       status,
       data_inicio: inicio || null,
@@ -143,7 +150,7 @@ export function ProjectForm({
           </Section>
 
           <Section title="Financeiro">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4">
               <Field label="Valor total do contrato (R$)" required>
                 <input
                   required
@@ -156,24 +163,48 @@ export function ProjectForm({
                   placeholder="0,00"
                 />
               </Field>
-              <Field label="RT — Responsabilidade Técnica (%)">
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  value={rt}
-                  onChange={(e) => setRt(e.target.value)}
-                  className={`${input} tnum`}
-                  placeholder="Ex.: 10"
-                />
-              </Field>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="RT — Responsabilidade Técnica (%)">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={rt}
+                    onChange={(e) => setRt(e.target.value)}
+                    className={`${input} tnum`}
+                    placeholder="Ex.: 10"
+                  />
+                </Field>
+                <Field label="ART — Anotação de Resp. Técnica (%)">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={art}
+                    onChange={(e) => setArt(e.target.value)}
+                    className={`${input} tnum`}
+                    placeholder="Ex.: 5"
+                  />
+                </Field>
+              </div>
             </div>
-            {Number(rt) > 0 && Number(valor) > 0 && (
-              <p className="mt-2 rounded-lg bg-brand-soft px-3 py-2 text-sm text-brand-dark">
-                RT a pagar ({rt}%):{" "}
-                <strong className="tnum">{brl(rtValor)}</strong>
-              </p>
+            {(Number(rt) > 0 || Number(art) > 0) && Number(valor) > 0 && (
+              <div className="mt-2 space-y-1.5">
+                {Number(rt) > 0 && (
+                  <p className="rounded-lg bg-brand-soft px-3 py-2 text-sm text-brand-dark">
+                    RT a pagar ({rt}%):{" "}
+                    <strong className="tnum">{brl(rtValor)}</strong>
+                  </p>
+                )}
+                {Number(art) > 0 && (
+                  <p className="rounded-lg bg-brand-soft px-3 py-2 text-sm text-brand-dark">
+                    ART a pagar ({art}%):{" "}
+                    <strong className="tnum">{brl(artValorCalc)}</strong>
+                  </p>
+                )}
+              </div>
             )}
           </Section>
 
