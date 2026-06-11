@@ -73,6 +73,29 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
     load();
   }, [load]);
 
+  // Lembra a aba selecionada entre recarregamentos da página
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("projectar_view");
+      const validas: View[] = [
+        "overview",
+        "obras",
+        "clientes",
+        "orcamentos",
+        "pagamentos",
+        "rt",
+        "documentos",
+      ];
+      if (saved && validas.includes(saved as View)) setView(saved as View);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("projectar_view", view);
+    } catch {}
+  }, [view]);
+
   // Garante que o cliente exista no cadastro (cria se for novo) e devolve o id
   async function resolverClienteId(nome: string): Promise<string | null> {
     const alvo = nome.trim().toLowerCase();
@@ -87,14 +110,21 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
     return data?.id ?? null;
   }
 
-  async function salvar(input: ProjetoInput) {
-    const cliente_id = await resolverClienteId(input.cliente);
-    const payload = { ...input, cliente_id };
-    if (editing) await supabase.from("projetos").update(payload).eq("id", editing.id);
-    else await supabase.from("projetos").insert(payload);
-    setShowForm(false);
-    setEditing(undefined);
-    await load();
+  async function salvar(input: ProjetoInput): Promise<string | null> {
+    try {
+      const cliente_id = await resolverClienteId(input.cliente);
+      const payload = { ...input, cliente_id };
+      const { error } = editing
+        ? await supabase.from("projetos").update(payload).eq("id", editing.id)
+        : await supabase.from("projetos").insert(payload);
+      if (error) return error.message;
+      setShowForm(false);
+      setEditing(undefined);
+      await load();
+      return null;
+    } catch (e: unknown) {
+      return e instanceof Error ? e.message : "Erro ao salvar a obra.";
+    }
   }
 
   async function salvarCliente(input: ClienteInput) {

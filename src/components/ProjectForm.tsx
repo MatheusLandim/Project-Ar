@@ -30,7 +30,7 @@ export function ProjectForm({
   initial?: Projeto;
   clientes?: { id: string; nome: string }[];
   onCancel: () => void;
-  onSave: (data: ProjetoInput) => Promise<void>;
+  onSave: (data: ProjetoInput) => Promise<string | null>;
 }) {
   const [cliente, setCliente] = useState(initial?.cliente ?? "");
   const [projeto, setProjeto] = useState(initial?.projeto ?? "");
@@ -53,6 +53,7 @@ export function ProjectForm({
   const [previsao, setPrevisao] = useState(initial?.data_previsao ?? "");
   const [obs, setObs] = useState(initial?.observacoes ?? "");
   const [saving, setSaving] = useState(false);
+  const [erroSalvar, setErroSalvar] = useState<string | null>(null);
 
   const rtValor =
     (Number(valor) || 0) * ((Number(rt) || 0) / 100);
@@ -61,7 +62,8 @@ export function ProjectForm({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    await onSave({
+    setErroSalvar(null);
+    const err = await onSave({
       cliente: cliente.trim(),
       projeto: projeto.trim(),
       tipo: tipo.trim() || "",
@@ -78,6 +80,7 @@ export function ProjectForm({
       observacoes: obs.trim() || null,
     });
     setSaving(false);
+    if (err) setErroSalvar(err);
   }
 
   return (
@@ -283,6 +286,11 @@ export function ProjectForm({
           </Field>
         </div>
 
+        {erroSalvar && (
+          <p className="mx-6 mb-1 rounded-lg bg-rose-500/10 px-3 py-2 text-sm text-rose-500">
+            Não foi possível salvar: {erroSalvar}
+          </p>
+        )}
         <footer className="flex justify-end gap-3 border-t border-line px-6 py-4">
           <button
             type="button"
