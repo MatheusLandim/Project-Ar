@@ -1,26 +1,50 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  darkMode: "class",
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        ink: { DEFAULT: "#0B1B2B", soft: "#475569", faint: "#94A3B8" },
-        brand: {
-          DEFAULT: "#0E7C86",
-          dark: "#0A5C64",
-          soft: "#E0F2F4",
+        canvas: "rgb(var(--c-bg) / <alpha-value>)",
+        surface: "rgb(var(--c-surface) / <alpha-value>)",
+        line: "rgb(var(--c-line) / <alpha-value>)",
+        ink: {
+          DEFAULT: "rgb(var(--c-ink) / <alpha-value>)",
+          soft: "rgb(var(--c-ink-soft) / <alpha-value>)",
+          faint: "rgb(var(--c-ink-faint) / <alpha-value>)",
         },
-        line: "#E2E8F0",
-        surface: "#FFFFFF",
-        canvas: "#EEF2F6",
+        brand: {
+          DEFAULT: "rgb(var(--c-brand) / <alpha-value>)",
+          dark: "rgb(var(--c-brand-dark) / <alpha-value>)",
+          soft: "rgb(var(--c-brand-soft) / <alpha-value>)",
+        },
+        navy: "rgb(var(--c-navy) / <alpha-value>)",
       },
       fontFamily: {
         sans: ["var(--font-inter)", "ui-sans-serif", "system-ui", "sans-serif"],
-        display: ["var(--font-grotesk)", "var(--font-inter)", "sans-serif"],
+        display: ["var(--font-sora)", "var(--font-inter)", "sans-serif"],
       },
       boxShadow: {
-        card: "0 1px 2px rgba(11,27,43,0.04), 0 8px 24px -12px rgba(11,27,43,0.12)",
+        card: "var(--shadow-card)",
+        glow: "0 0 0 1px rgb(var(--c-brand) / 0.15), 0 8px 40px -12px rgb(var(--c-brand) / 0.35)",
+      },
+      keyframes: {
+        fadeUp: {
+          "0%": { opacity: "0", transform: "translateY(10px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        scaleIn: {
+          "0%": { opacity: "0", transform: "scale(.96)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
+        },
+        shimmer: {
+          "100%": { transform: "translateX(100%)" },
+        },
+      },
+      animation: {
+        "fade-up": "fadeUp .45s cubic-bezier(.2,.7,.2,1) both",
+        "scale-in": "scaleIn .2s ease both",
       },
     },
   },
