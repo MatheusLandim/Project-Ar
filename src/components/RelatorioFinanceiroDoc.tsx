@@ -56,6 +56,7 @@ export function RelatorioMensalViewer({
   const [mes, setMes] = useState(mesInicial ?? mesReferenciaAtual());
   const [anexosPorLancamento, setAnexosPorLancamento] = useState<Record<string, AnexoLink[]>>({});
   const [carregandoAnexos, setCarregandoAnexos] = useState(true);
+  const [erroAnexos, setErroAnexos] = useState<string | null>(null);
 
   const pagos = useMemo(
     () => linhasDoMes(contasPagar, mes, (c) => c.data_pagamento),
@@ -70,9 +71,10 @@ export function RelatorioMensalViewer({
     let cancelado = false;
     async function carregar() {
       setCarregandoAnexos(true);
+      setErroAnexos(null);
       const idsPagar = pagos.map((c) => c.id);
       const idsReceber = recebidos.map((c) => c.id);
-      const consultas = [];
+      const consultas: any[] = [];
       if (idsPagar.length > 0)
         consultas.push(
           supabase.from("documentos").select("*").eq("lancamento_tipo", "pagar").in("lancamento_id", idsPagar)
@@ -81,20 +83,52 @@ export function RelatorioMensalViewer({
         consultas.push(
           supabase.from("documentos").select("*").eq("lancamento_tipo", "receber").in("lancamento_id", idsReceber)
         );
+
+      if (consultas.length === 0) {
+        if (!cancelado) {
+          setAnexosPorLancamento({});
+          setCarregandoAnexos(false);
+        }
+        return;
+      }
+
       const resultados = await Promise.all(consultas);
-      const docs: Documento[] = resultados.flatMap((r) => (r.data as Documento[]) ?? []);
+      const erroConsulta = resultados.find((r: any) => r.error)?.error as any;
+      if (erroConsulta) {
+        if (!cancelado) {
+          setErroAnexos(
+            `Não foi possível buscar os anexos (${erroConsulta.message}). Confira se rodou a migration-financeiro-v4.sql no Supabase.`
+          );
+          setCarregandoAnexos(false);
+        }
+        return;
+      }
+      const docs: Documento[] = resultados.flatMap((r: any) => (r.data as Documento[]) ?? []);
 
       const mapa: Record<string, AnexoLink[]> = {};
+      let falhasAssinatura = 0;
       await Promise.all(
         docs.map(async (d) => {
-          const { data } = await supabase.storage.from("anexos").createSignedUrl(d.path, VALIDADE_LINK_SEGUNDOS);
-          if (!data?.signedUrl || !d.lancamento_id) return;
+          if (!d.lancamento_id) return;
+          const { data, error } = await supabase.storage.from("anexos").createSignedUrl(d.path, VALIDADE_LINK_SEGUNDOS);
           if (!mapa[d.lancamento_id]) mapa[d.lancamento_id] = [];
-          mapa[d.lancamento_id].push({ nome: d.nome, url: data.signedUrl });
+          if (data?.signedUrl) {
+            mapa[d.lancamento_id].push({ nome: d.nome, url: data.signedUrl });
+          } else {
+            // Mostra o nome do arquivo mesmo se o link não puder ser gerado,
+            // pra deixar claro que o anexo existe (em vez de sumir da tela).
+            falhasAssinatura++;
+            mapa[d.lancamento_id].push({ nome: `${d.nome} (erro ao gerar link${error ? ": " + error.message : ""})`, url: "" });
+          }
         })
       );
       if (!cancelado) {
         setAnexosPorLancamento(mapa);
+        if (falhasAssinatura > 0 && docs.length > 0) {
+          setErroAnexos(
+            `${falhasAssinatura} de ${docs.length} anexo(s) não geraram link de download. Verifique as políticas de Storage do bucket "anexos" no Supabase.`
+          );
+        }
         setCarregandoAnexos(false);
       }
     }
@@ -136,6 +170,12 @@ export function RelatorioMensalViewer({
           </button>
         </div>
       </div>
+
+      {erroAnexos && (
+        <div className="no-print border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-700">
+          ⚠ {erroAnexos}
+        </div>
+      )}
 
       <div
         className="flex justify-center overflow-auto bg-slate-300 p-4"
@@ -363,14 +403,21 @@ function TabelaLancamentos({
                 {anexos.length === 0 ? (
                   <span style={{ color: MUTED }}>—</span>
                 ) : (
-                  anexos.map((a, i) => (
-                    <span key={i}>
-                      <a href={a.url} target="_blank" rel="noreferrer" style={{ color: BLUE, textDecoration: "underline" }}>
+                  anexos.map((a, i) =>
+                    a.url ? (
+                      <span key={i}>
+                        <a href={a.url} target="_blank" rel="noreferrer" style={{ color: BLUE, textDecoration: "underline" }}>
+                          {a.nome}
+                        </a>
+                        {i < anexos.length - 1 && <br />}
+                      </span>
+                    ) : (
+                      <span key={i} style={{ color: "#b45309" }}>
                         {a.nome}
-                      </a>
-                      {i < anexos.length - 1 && <br />}
-                    </span>
-                  ))
+                        {i < anexos.length - 1 && <br />}
+                      </span>
+                    )
+                  )
                 )}
               </td>
               <td style={{ padding: "5px 6px", textAlign: "right", fontWeight: 700 }}>{linha.valor}</td>

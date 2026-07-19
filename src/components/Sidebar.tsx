@@ -20,14 +20,14 @@ const ITEMS: {
   icon: React.ReactNode;
 }[] = [
   { id: "overview", label: "Visão geral", icon: <IconGrid /> },
-  { id: "obras", label: "Obras", icon: <IconBuilding /> },
   { id: "clientes", label: "Clientes", icon: <IconUsers /> },
+  { id: "documentos", label: "Documentos", icon: <IconDoc /> },
+  { id: "financeiro", label: "Financeiro", icon: <IconWallet /> },
   { id: "fornecedores", label: "Fornecedores", icon: <IconTruck /> },
+  { id: "obras", label: "Obras", icon: <IconBuilding /> },
   { id: "orcamentos", label: "Orçamentos", icon: <IconQuote /> },
   { id: "pagamentos", label: "Recebimentos", icon: <IconCash /> },
   { id: "rt", label: "RT / ART", icon: <IconBadge /> },
-  { id: "documentos", label: "Documentos", icon: <IconDoc /> },
-  { id: "financeiro", label: "Financeiro", icon: <IconWallet /> },
 ];
 
 export function Sidebar({
