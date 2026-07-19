@@ -23,6 +23,7 @@ export function DocumentosView({
 }) {
   const supabase = createClient();
   const [filtro, setFiltro] = useState("Todos");
+  const [clienteFiltro, setClienteFiltro] = useState("Todos");
   const [busca, setBusca] = useState("");
 
   const todas = useMemo<Linha[]>(() => {
@@ -46,20 +47,27 @@ export function DocumentosView({
     return ["Todos", ...[...set].sort()];
   }, [todas]);
 
+  const clientesComDocumento = useMemo(() => {
+    const set = new Set<string>();
+    todas.forEach((l) => l._cliente && set.add(l._cliente));
+    return ["Todos", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+  }, [todas]);
+
   const linhas = useMemo(() => {
     const q = busca.trim().toLowerCase();
     return todas
       .filter((l) => {
         const okF = filtro === "Todos" || l._pasta === filtro;
+        const okC = clienteFiltro === "Todos" || l._cliente === clienteFiltro;
         const okB =
           !q ||
           l.nome.toLowerCase().includes(q) ||
           l._cliente.toLowerCase().includes(q) ||
           l._projeto.toLowerCase().includes(q);
-        return okF && okB;
+        return okF && okC && okB;
       })
       .sort((a, b) => b.criado_em.localeCompare(a.criado_em));
-  }, [todas, filtro, busca]);
+  }, [todas, filtro, clienteFiltro, busca]);
 
   async function abrir(path: string) {
     const { data, error } = await supabase.storage
@@ -83,6 +91,17 @@ export function DocumentosView({
           placeholder="Buscar por arquivo, cliente ou obra…"
           className="t-colors flex-1 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink sm:max-w-sm"
         />
+        <select
+          value={clienteFiltro}
+          onChange={(e) => setClienteFiltro(e.target.value)}
+          className="t-colors rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink"
+        >
+          {clientesComDocumento.map((c) => (
+            <option key={c} value={c}>
+              {c === "Todos" ? "Todos os clientes" : c}
+            </option>
+          ))}
+        </select>
         <div className="flex flex-wrap gap-1.5">
           {pastas.map((f) => (
             <button

@@ -329,6 +329,24 @@ export function labelMesReferencia(mes: string): string {
   return `${nomes[idx] ?? m}/${ano}`;
 }
 
+// Linha unificada de recebíveis: junta Contas a Receber (nativo do
+// Financeiro) com os "Recebimentos" antigos ligados a obras (tabela
+// pagamentos), pra aparecerem numa lista só com o mesmo dar-baixa/reabrir
+// e no mesmo relatório mensal.
+export type OrigemReceber = "receber" | "obra";
+
+export type LinhaReceber = {
+  id: string;
+  origem: OrigemReceber;
+  titulo: string;
+  subtitulo: string;
+  valor: number;
+  vencimento: string | null;
+  dataRecebimento: string | null;
+  status: FinanceiroStatus;
+  clienteId: string | null;
+};
+
 export type EntidadeTipo = "cliente" | "fornecedor";
 export type LancamentoTipo = "pagar" | "receber" | "nota";
 

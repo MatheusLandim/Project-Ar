@@ -87,7 +87,7 @@ export function OverviewView({
           </h3>
           <div className="mt-3 space-y-3">
             <button
-              onClick={() => onNavigate("pagamentos")}
+              onClick={() => onNavigate("financeiro")}
               className="t-colors flex w-full items-center gap-3 rounded-xl border border-rose-500/20 bg-rose-500/5 px-4 py-3 text-left hover:bg-rose-500/10"
             >
               <span className="grid h-9 w-9 place-items-center rounded-lg bg-rose-500/15 text-rose-500">
@@ -129,7 +129,7 @@ export function OverviewView({
               Próximos vencimentos
             </h3>
             <button
-              onClick={() => onNavigate("pagamentos")}
+              onClick={() => onNavigate("financeiro")}
               className="text-xs font-medium text-brand hover:underline"
             >
               ver todos

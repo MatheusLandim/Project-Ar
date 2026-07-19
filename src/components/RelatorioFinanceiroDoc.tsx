@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { LogoMark } from "@/components/Logo";
 import {
   ContaPagar,
-  ContaReceber,
+  LinhaReceber,
   ProLabore,
   Documento,
   labelMesReferencia,
@@ -38,18 +38,16 @@ type AnexoLink = { nome: string; url: string };
 export function RelatorioMensalViewer({
   mes: mesInicial,
   contasPagar,
-  contasReceber,
+  recebiveis,
   proLabore,
   nomeFornecedor,
-  nomeCliente,
   onClose,
 }: {
   mes?: string;
   contasPagar: ContaPagar[];
-  contasReceber: ContaReceber[];
+  recebiveis: LinhaReceber[];
   proLabore: ProLabore[];
   nomeFornecedor: (id: string | null) => string;
-  nomeCliente: (id: string | null) => string;
   onClose: () => void;
 }) {
   const supabase = createClient();
@@ -63,8 +61,8 @@ export function RelatorioMensalViewer({
     [contasPagar, mes]
   );
   const recebidos = useMemo(
-    () => linhasDoMes(contasReceber, mes, (c) => c.data_recebimento),
-    [contasReceber, mes]
+    () => linhasDoMes(recebiveis, mes, (l) => l.dataRecebimento),
+    [recebiveis, mes]
   );
 
   useEffect(() => {
@@ -177,6 +175,12 @@ export function RelatorioMensalViewer({
         </div>
       )}
 
+      <div className="no-print border-b border-line bg-canvas/60 px-4 py-2 text-xs text-ink-faint">
+        A coluna <strong>Anexos</strong> só mostra link quando o lançamento tem arquivo enviado pelo botão{" "}
+        <strong>📎</strong> na lista de Contas a Pagar / Contas a Receber. Um traço (—) significa que ainda não
+        tem nada anexado nesse lançamento.
+      </div>
+
       <div
         className="flex justify-center overflow-auto bg-slate-300 p-4"
         style={{ height: "calc(100vh - 56px)" }}
@@ -188,7 +192,6 @@ export function RelatorioMensalViewer({
             recebidos={recebidos}
             proLabore={proLabore}
             nomeFornecedor={nomeFornecedor}
-            nomeCliente={nomeCliente}
             anexosPorLancamento={anexosPorLancamento}
           />
         </div>
@@ -203,15 +206,13 @@ function RelatorioDoc({
   recebidos,
   proLabore,
   nomeFornecedor,
-  nomeCliente,
   anexosPorLancamento,
 }: {
   mes: string;
   pagos: ContaPagar[];
-  recebidos: ContaReceber[];
+  recebidos: LinhaReceber[];
   proLabore: ProLabore[];
   nomeFornecedor: (id: string | null) => string;
-  nomeCliente: (id: string | null) => string;
   anexosPorLancamento: Record<string, AnexoLink[]>;
 }) {
   const proLaboreMes = useMemo(
@@ -220,7 +221,7 @@ function RelatorioDoc({
   );
 
   const totalPago = pagos.reduce((s, c) => s + Number(c.valor), 0);
-  const totalRecebido = recebidos.reduce((s, c) => s + Number(c.valor), 0);
+  const totalRecebido = recebidos.reduce((s, l) => s + l.valor, 0);
   const totalProLabore = proLaboreMes.reduce((s, p) => s + Number(p.valor), 0);
 
   return (
@@ -282,11 +283,11 @@ function RelatorioDoc({
             <VazioLinha texto="Nenhuma conta recebida neste período." />
           ) : (
             <TabelaLancamentos
-              colunas={["Cliente", "Tipo", "Recebido em", "Anexos", "Valor"]}
-              linhas={recebidos.map((c) => ({
-                id: c.id,
-                celulas: [nomeCliente(c.cliente_id), c.tipo, formatDate(c.data_recebimento)],
-                valor: brl(Number(c.valor)),
+              colunas={["Cliente", "Origem", "Recebido em", "Anexos", "Valor"]}
+              linhas={recebidos.map((l) => ({
+                id: l.id,
+                celulas: [l.titulo, l.subtitulo, formatDate(l.dataRecebimento)],
+                valor: brl(l.valor),
               }))}
               anexosPorLancamento={anexosPorLancamento}
             />

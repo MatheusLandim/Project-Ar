@@ -8,7 +8,6 @@ export type View =
   | "obras"
   | "clientes"
   | "orcamentos"
-  | "pagamentos"
   | "rt"
   | "documentos"
   | "financeiro"
@@ -26,7 +25,6 @@ const ITEMS: {
   { id: "fornecedores", label: "Fornecedores", icon: <IconTruck /> },
   { id: "obras", label: "Obras", icon: <IconBuilding /> },
   { id: "orcamentos", label: "Orçamentos", icon: <IconQuote /> },
-  { id: "pagamentos", label: "Recebimentos", icon: <IconCash /> },
   { id: "rt", label: "RT / ART", icon: <IconBadge /> },
 ];
 

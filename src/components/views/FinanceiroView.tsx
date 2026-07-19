@@ -11,12 +11,16 @@ import {
   ContaReceber,
   ProLabore,
   NotaFiscal,
+  Pagamento,
   contaPagarStatus,
   contaReceberStatus,
+  pagamentoStatus,
   TIPOS_CONTA_PAGAR,
   TIPOS_CONTA_RECEBER,
   mesReferenciaAtual,
   labelMesReferencia,
+  FinanceiroStatus,
+  LinhaReceber,
 } from "@/lib/types";
 import { brl, formatDate, hoje } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -63,9 +67,11 @@ const TABS: { id: Tab; label: string }[] = [
 export function FinanceiroView({
   clientes,
   projetos,
+  reloadProjetos,
 }: {
   clientes: Cliente[];
   projetos: Projeto[];
+  reloadProjetos: () => void;
 }) {
   const supabase = createClient();
   const [tab, setTab] = useState<Tab>("fluxo");
@@ -159,17 +165,27 @@ export function FinanceiroView({
     setEditReceber(undefined);
     await load();
   }
-  async function excluirReceber(c: ContaReceber) {
-    if (!confirm("Excluir este lançamento de Contas a Receber?")) return;
-    await supabase.from("contas_receber").delete().eq("id", c.id);
-    await load();
+  // Ações unificadas: cobrem tanto os lançamentos nativos de Contas a
+  // Receber quanto os "Recebimentos" antigos (tabela pagamentos, ligados a
+  // obras) — mesmo procedimento de dar baixa/reabrir/excluir para os dois.
+  async function baixarLinhaReceber(l: LinhaReceber) {
+    if (l.origem === "receber") {
+      await supabase.from("contas_receber").update({ data_recebimento: l.dataRecebimento ? null : hoje() }).eq("id", l.id);
+      await load();
+    } else {
+      await supabase.from("pagamentos").update({ data_pagamento: l.dataRecebimento ? null : hoje() }).eq("id", l.id);
+      await reloadProjetos();
+    }
   }
-  async function baixarReceber(c: ContaReceber) {
-    await supabase
-      .from("contas_receber")
-      .update({ data_recebimento: c.data_recebimento ? null : hoje() })
-      .eq("id", c.id);
-    await load();
+  async function excluirLinhaReceber(l: LinhaReceber) {
+    if (!confirm("Excluir este lançamento?")) return;
+    if (l.origem === "receber") {
+      await supabase.from("contas_receber").delete().eq("id", l.id);
+      await load();
+    } else {
+      await supabase.from("pagamentos").delete().eq("id", l.id);
+      await reloadProjetos();
+    }
   }
 
   // ---------- CRUD: Despesas Fixas ----------
@@ -268,6 +284,38 @@ export function FinanceiroView({
     );
   }
 
+  // ---------- Unificação: Contas a Receber + Recebimentos (obras) ----------
+  const linhasReceber = useMemo<LinhaReceber[]>(() => {
+    const nativas: LinhaReceber[] = contasReceber.map((c) => ({
+      id: c.id,
+      origem: "receber",
+      titulo: clientes.find((x) => x.id === c.cliente_id)?.nome ?? "—",
+      subtitulo: TIPOS_CONTA_RECEBER[c.tipo] + (c.numero_nf ? ` · NF ${c.numero_nf}` : ""),
+      valor: Number(c.valor),
+      vencimento: c.vencimento,
+      dataRecebimento: c.data_recebimento,
+      status: contaReceberStatus(c),
+      clienteId: c.cliente_id,
+    }));
+    const deObras: LinhaReceber[] = [];
+    for (const p of projetos) {
+      for (const pg of p.pagamentos ?? []) {
+        deObras.push({
+          id: pg.id,
+          origem: "obra",
+          titulo: p.cliente,
+          subtitulo: (pg.descricao || "Recebimento") + ` · ${p.projeto}`,
+          valor: Number(pg.valor),
+          vencimento: pg.data_vencimento,
+          dataRecebimento: pg.data_pagamento,
+          status: pagamentoStatus(pg),
+          clienteId: p.cliente_id,
+        });
+      }
+    }
+    return [...nativas, ...deObras].sort((a, b) => (a.vencimento ?? "9999").localeCompare(b.vencimento ?? "9999"));
+  }, [contasReceber, projetos, clientes]);
+
   // ---------- Totais / Fluxo de caixa (mês atual) ----------
   const mesAtual = mesReferenciaAtual();
   const totais = useMemo(() => {
@@ -281,19 +329,18 @@ export function FinanceiroView({
       else aPagar += Number(c.valor);
     }
     let aReceber = 0, recebido = 0, atrasadoReceber = 0;
-    for (const c of contasReceber) {
-      if (!c.vencimento?.startsWith(mesAtual) && !doMes(c.data_recebimento)) continue;
-      const st = contaReceberStatus(c);
-      if (st === "pago") recebido += Number(c.valor);
-      else if (st === "atrasado") atrasadoReceber += Number(c.valor);
-      else aReceber += Number(c.valor);
+    for (const l of linhasReceber) {
+      if (!l.vencimento?.startsWith(mesAtual) && !doMes(l.dataRecebimento)) continue;
+      if (l.status === "pago") recebido += l.valor;
+      else if (l.status === "atrasado") atrasadoReceber += l.valor;
+      else aReceber += l.valor;
     }
     const proLaboreMes = proLabore
       .filter((p) => p.mes_referencia === mesAtual)
       .reduce((s, p) => s + Number(p.valor), 0);
     const saldo = recebido - (pago + proLaboreMes);
     return { aPagar, pago, atrasadoPagar, aReceber, recebido, atrasadoReceber, proLaboreMes, saldo };
-  }, [contasPagar, contasReceber, proLabore, mesAtual]);
+  }, [contasPagar, linhasReceber, proLabore, mesAtual]);
 
   const nomeFornecedor = (id: string | null) =>
     fornecedores.find((f) => f.id === id)?.nome ?? "—";
@@ -385,22 +432,24 @@ export function FinanceiroView({
 
       {tab === "receber" && (
         <ContasReceberTab
-          contas={contasReceber}
-          nomeCliente={nomeCliente}
+          linhas={linhasReceber}
           onNew={() => { setEditReceber(undefined); setShowReceber(true); }}
-          onEdit={(c) => { setEditReceber(c); setShowReceber(true); }}
-          onDelete={excluirReceber}
-          onBaixar={baixarReceber}
-          onAbrirPasta={(c) => {
-            const cli = clientes.find((x) => x.id === c.cliente_id);
+          onEdit={(l) => {
+            const c = contasReceber.find((x) => x.id === l.id);
+            if (c) { setEditReceber(c); setShowReceber(true); }
+          }}
+          onDelete={excluirLinhaReceber}
+          onBaixar={baixarLinhaReceber}
+          onAbrirPasta={(l) => {
+            const cli = clientes.find((x) => x.id === l.clienteId);
             if (cli) setShowPasta({ tipo: "cliente", id: cli.id, nome: cli.nome });
           }}
-          onAbrirAnexos={(c) => setShowAnexos({
+          onAbrirAnexos={(l) => setShowAnexos({
             tipo: "receber",
-            id: c.id,
-            titulo: nomeCliente(c.cliente_id),
-            entidadeTipo: c.cliente_id ? "cliente" : null,
-            entidadeId: c.cliente_id,
+            id: l.id,
+            titulo: l.titulo,
+            entidadeTipo: l.clienteId ? "cliente" : null,
+            entidadeId: l.clienteId,
           })}
         />
       )}
@@ -501,10 +550,9 @@ export function FinanceiroView({
         <RelatorioMensalViewer
           mes={mesAtual}
           contasPagar={contasPagar}
-          contasReceber={contasReceber}
+          recebiveis={linhasReceber}
           proLabore={proLabore}
           nomeFornecedor={nomeFornecedor}
-          nomeCliente={nomeCliente}
           onClose={() => setShowRelatorio(false)}
         />
       )}
@@ -703,8 +751,7 @@ function ContasPagarTab({
 // ===================== Contas a Receber =====================
 
 function ContasReceberTab({
-  contas,
-  nomeCliente,
+  linhas: todasLinhas,
   onNew,
   onEdit,
   onDelete,
@@ -712,17 +759,16 @@ function ContasReceberTab({
   onAbrirPasta,
   onAbrirAnexos,
 }: {
-  contas: ContaReceber[];
-  nomeCliente: (id: string | null) => string;
+  linhas: LinhaReceber[];
   onNew: () => void;
-  onEdit: (c: ContaReceber) => void;
-  onDelete: (c: ContaReceber) => void;
-  onBaixar: (c: ContaReceber) => void;
-  onAbrirPasta: (c: ContaReceber) => void;
-  onAbrirAnexos: (c: ContaReceber) => void;
+  onEdit: (l: LinhaReceber) => void;
+  onDelete: (l: LinhaReceber) => void;
+  onBaixar: (l: LinhaReceber) => void;
+  onAbrirPasta: (l: LinhaReceber) => void;
+  onAbrirAnexos: (l: LinhaReceber) => void;
 }) {
   const [filtro, setFiltro] = useState<"todos" | "atrasado" | "pendente" | "pago">("todos");
-  const lista = contas.filter((c) => filtro === "todos" || contaReceberStatus(c) === filtro);
+  const lista = todasLinhas.filter((l) => filtro === "todos" || l.status === filtro);
 
   return (
     <div>
@@ -732,52 +778,55 @@ function ContasReceberTab({
           <p className="p-8 text-center text-sm text-ink-soft">Nenhum lançamento neste filtro.</p>
         ) : (
           <ul className="divide-y divide-line">
-            {lista.map((c) => {
-              const st = contaReceberStatus(c);
-              return (
-                <li key={c.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-5">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-ink">
-                      {nomeCliente(c.cliente_id)}
-                      <span className="font-normal text-ink-faint"> · {TIPOS_CONTA_RECEBER[c.tipo]}</span>
-                    </p>
-                    <p className="text-xs text-ink-soft">
-                      vence {formatDate(c.vencimento)}
-                      {c.data_recebimento && <> · recebido {formatDate(c.data_recebimento)}</>}
-                      {c.numero_nf && <> · NF {c.numero_nf}</>}
-                    </p>
-                  </div>
-                  <span className="tnum text-sm font-semibold text-ink">{brl(Number(c.valor))}</span>
-                  <StatusBadge status={st} kind="pagamento" />
+            {lista.map((l) => (
+              <li key={`${l.origem}-${l.id}`} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-5">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-ink">
+                    {l.titulo}
+                    <span className="font-normal text-ink-faint"> · {l.subtitulo}</span>
+                    {l.origem === "obra" && (
+                      <span className="ml-1.5 rounded-full bg-ink/10 px-1.5 py-0.5 text-[10px] font-semibold text-ink-faint">obra</span>
+                    )}
+                  </p>
+                  <p className="text-xs text-ink-soft">
+                    vence {formatDate(l.vencimento)}
+                    {l.dataRecebimento && <> · recebido {formatDate(l.dataRecebimento)}</>}
+                  </p>
+                </div>
+                <span className="tnum text-sm font-semibold text-ink">{brl(l.valor)}</span>
+                <StatusBadge status={l.status} kind="pagamento" />
+                <button
+                  onClick={() => onAbrirAnexos(l)}
+                  title="Anexos deste lançamento (comprovante, boleto, nota)"
+                  className="t-colors rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5"
+                >
+                  📎
+                </button>
+                {l.clienteId && (
                   <button
-                    onClick={() => onAbrirAnexos(c)}
-                    title="Anexos deste lançamento (comprovante, boleto, nota)"
+                    onClick={() => onAbrirPasta(l)}
+                    title="Abrir pasta do cliente"
                     className="t-colors rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5"
                   >
-                    📎
+                    📁
                   </button>
-                  {c.cliente_id && (
-                    <button
-                      onClick={() => onAbrirPasta(c)}
-                      title="Abrir pasta do cliente"
-                      className="t-colors rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5"
-                    >
-                      📁
-                    </button>
-                  )}
-                  <button
-                    onClick={() => onBaixar(c)}
-                    className={`t-colors rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
-                      c.data_recebimento ? "text-ink-soft hover:bg-ink/5" : "bg-emerald-600 text-white hover:bg-emerald-700"
-                    }`}
-                  >
-                    {c.data_recebimento ? "Reabrir" : "Receber"}
-                  </button>
-                  <button onClick={() => onEdit(c)} className="rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5">✎</button>
-                  <button onClick={() => onDelete(c)} className="rounded-lg px-2 py-1.5 text-xs text-rose-500 hover:bg-rose-500/10">🗑</button>
-                </li>
-              );
-            })}
+                )}
+                <button
+                  onClick={() => onBaixar(l)}
+                  className={`t-colors rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
+                    l.dataRecebimento ? "text-ink-soft hover:bg-ink/5" : "bg-emerald-600 text-white hover:bg-emerald-700"
+                  }`}
+                >
+                  {l.dataRecebimento ? "Reabrir" : "Receber"}
+                </button>
+                {l.origem === "receber" ? (
+                  <button onClick={() => onEdit(l)} className="rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5">✎</button>
+                ) : (
+                  <span className="px-1 text-xs text-ink-faint" title="Edite pela obra, em Obras">✎</span>
+                )}
+                <button onClick={() => onDelete(l)} className="rounded-lg px-2 py-1.5 text-xs text-rose-500 hover:bg-rose-500/10">🗑</button>
+              </li>
+            ))}
           </ul>
         )}
       </div>

@@ -14,7 +14,6 @@ import { OverviewView } from "@/components/views/OverviewView";
 import { ObrasView } from "@/components/views/ObrasView";
 import { ClientesView } from "@/components/views/ClientesView";
 import { OrcamentosView } from "@/components/views/OrcamentosView";
-import { PagamentosView } from "@/components/views/PagamentosView";
 import { RtView } from "@/components/views/RtView";
 import { DocumentosView } from "@/components/views/DocumentosView";
 import { FinanceiroView } from "@/components/views/FinanceiroView";
@@ -25,7 +24,6 @@ const TITULOS: Record<View, { t: string; s: string }> = {
   obras: { t: "Obras", s: "Seus projetos e contratos." },
   clientes: { t: "Clientes", s: "Ficha de cada cliente e o que já contratou." },
   orcamentos: { t: "Orçamentos", s: "Crie propostas, gere o PDF e converta em obra." },
-  pagamentos: { t: "Recebimentos", s: "Tudo o que você recebe pelas obras, em um só lugar." },
   rt: { t: "RT / ART", s: "Taxas de responsabilidade técnica que você paga." },
   documentos: { t: "Documentos", s: "Notas fiscais e boletos anexados." },
   financeiro: {
@@ -92,7 +90,6 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
         "obras",
         "clientes",
         "orcamentos",
-        "pagamentos",
         "rt",
         "documentos",
         "financeiro",
@@ -239,7 +236,7 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
         (Number(p.rt_percentual) > 0 && !p.rt_pago) ||
         (Number(p.art_valor) > 0 && !p.art_pago)
     ).length;
-    return { pagamentos: atras || undefined, rt: rt || undefined };
+    return { financeiro: atras || undefined, rt: rt || undefined };
   }, [projetos]);
 
   return (
@@ -316,8 +313,6 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
               onConvert={converterOrcamento}
               onDelete={excluirOrcamento}
             />
-          ) : view === "pagamentos" ? (
-            <PagamentosView projetos={projetos} reload={load} />
           ) : view === "rt" ? (
             <RtView projetos={projetos} reload={load} />
           ) : view === "documentos" ? (
@@ -325,7 +320,7 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
           ) : view === "fornecedores" ? (
             <FornecedoresView />
           ) : (
-            <FinanceiroView clientes={clientes} projetos={projetos} />
+            <FinanceiroView clientes={clientes} projetos={projetos} reloadProjetos={load} />
           )}
         </div>
       </main>
