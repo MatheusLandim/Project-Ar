@@ -9,7 +9,10 @@ e Despesas Fixas. São **2 passos** para colocar no ar.
 1. Entre no **Supabase** → seu projeto → **SQL Editor** → **New query**.
 2. Abra o arquivo **`supabase/migration-financeiro.sql`** (vem neste zip),
    copie TODO o conteúdo, cole e clique em **Run**.
-3. Deve aparecer **Success**. Isso cria as tabelas `fornecedores`,
+3. Rode também **`supabase/migration-financeiro-v2.sql`** (mesma forma) —
+   ele adiciona a pasta do cliente e o vínculo da nota fiscal com
+   cliente/fornecedor.
+4. Deve aparecer **Success** nos dois. Isso cria as tabelas `fornecedores`,
    `despesas_fixas`, `contas_pagar`, `contas_receber`, `pro_labore` e
    `notas_fiscais`, já compartilhadas com toda a equipe (mesmo padrão do
    restante do sistema).
@@ -26,11 +29,20 @@ e Despesas Fixas. São **2 passos** para colocar no ar.
 
 ## Como usar
 
+- **Cartão de Crédito** é a mesma tabela de Contas a Pagar — lance a fatura
+  do mês como um lançamento normal. Ele aparece tanto na lista geral de
+  **Contas a Pagar** quanto na aba dedicada **Cartão de Crédito** (é só um
+  filtro de conveniência, o dado é o mesmo).
+- **Pastas de cliente/fornecedor:** cadastre a pasta uma vez no cliente
+  (tela **Clientes**, ou no "+ novo" rápido) ou no fornecedor (no "+ novo"
+  rápido dentro de Contas a Pagar). A partir daí, todo lançamento — Contas
+  a Pagar, Contas a Receber e Nota Fiscal — puxa essa pasta automaticamente
+  ao selecionar o cliente/fornecedor, então notas, boletos e comprovantes
+  ficam todos apontando pro mesmo lugar. Ainda dá pra ajustar manualmente
+  em cada lançamento se precisar.
 - **Contas a Pagar / a Receber:** clique em **+ Novo lançamento**. Ao
   escolher fornecedor ou cliente, dá para cadastrar um novo na hora com o
   botão **+ novo**, sem sair da tela.
-- **Cartão de Crédito** é a mesma tabela de Contas a Pagar, filtrada pelo
-  tipo "Cartão de Crédito" — lance a fatura do mês como um lançamento normal.
 - **Despesas Fixas:** cadastre Contabilidade, DAS, DARF, Convênio etc. com o
   dia de vencimento. Na aba **Fluxo de Caixa**, o botão **"Gerar despesas
   fixas do mês"** cria os lançamentos do mês em Contas a Pagar (não duplica

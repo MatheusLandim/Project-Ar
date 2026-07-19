@@ -72,6 +72,7 @@ export type Cliente = {
   contato: string | null;
   endereco: string | null;
   observacoes: string | null;
+  pasta_url: string | null;
   criado_em: string;
 };
 
@@ -249,11 +250,14 @@ export type NotaFiscal = {
   numero: string | null;
   tipo: "servico" | "produto";
   cliente_fornecedor: string | null;
+  cliente_id: string | null;
+  fornecedor_id: string | null;
   valor: number;
   data_emissao: string | null;
   impostos: number | null;
   status: "emitida" | "cancelada";
   arquivo_url: string | null;
+  pasta_url: string | null;
   criado_em: string;
 };
 

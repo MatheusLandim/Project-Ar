@@ -13,6 +13,7 @@ export type ClienteInput = {
   contato: string | null;
   endereco: string | null;
   observacoes: string | null;
+  pasta_url: string | null;
 };
 
 const input =
@@ -35,6 +36,7 @@ export function ClienteForm({
   const [email, setEmail] = useState(initial?.email ?? "");
   const [endereco, setEndereco] = useState(initial?.endereco ?? "");
   const [obs, setObs] = useState(initial?.observacoes ?? "");
+  const [pastaUrl, setPastaUrl] = useState(initial?.pasta_url ?? "");
   const [saving, setSaving] = useState(false);
 
   async function submit(e: React.FormEvent) {
@@ -49,6 +51,7 @@ export function ClienteForm({
       contato: contato.trim() || null,
       endereco: endereco.trim() || null,
       observacoes: obs.trim() || null,
+      pasta_url: pastaUrl.trim() || null,
     });
     setSaving(false);
   }
@@ -147,6 +150,18 @@ export function ClienteForm({
               placeholder="Condições, histórico, anotações…"
             />
           </Field>
+
+          <Field
+            label="Pasta do cliente (nuvem)"
+            hint="Link da pasta onde ficam notas fiscais, boletos e comprovantes deste cliente. Os lançamentos financeiros puxam esse link automaticamente."
+          >
+            <input
+              value={pastaUrl ?? ""}
+              onChange={(e) => setPastaUrl(e.target.value)}
+              className={input}
+              placeholder="https://..."
+            />
+          </Field>
         </div>
 
         <footer className="flex justify-end gap-3 border-t border-line px-6 py-4">
@@ -173,10 +188,12 @@ export function ClienteForm({
 function Field({
   label,
   required,
+  hint,
   children,
 }: {
   label: string;
   required?: boolean;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -185,6 +202,7 @@ function Field({
         {label} {required && <span className="text-brand">*</span>}
       </span>
       {children}
+      {hint && <span className="mt-1 block text-[11px] text-ink-faint">{hint}</span>}
     </label>
   );
 }

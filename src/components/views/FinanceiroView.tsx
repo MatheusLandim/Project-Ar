@@ -329,7 +329,7 @@ export function FinanceiroView({
 
       {tab === "pagar" && (
         <ContasPagarTab
-          contas={contasPagar.filter((c) => c.tipo !== "cartao_credito")}
+          contas={contasPagar}
           nomeFornecedor={nomeFornecedor}
           onNew={() => { setEditPagar(undefined); setShowPagar(true); }}
           onEdit={(c) => { setEditPagar(c); setShowPagar(true); }}
@@ -425,6 +425,8 @@ export function FinanceiroView({
       {showNota && (
         <NotaFiscalForm
           initial={editNota}
+          clientes={clientes}
+          fornecedores={fornecedores}
           onCancel={() => { setShowNota(false); setEditNota(undefined); }}
           onSave={salvarNota}
         />
@@ -772,6 +774,12 @@ function NotasFiscaisTab({
                       <>
                         {" · "}
                         <a href={n.arquivo_url} target="_blank" rel="noreferrer" className="text-brand underline">arquivo</a>
+                      </>
+                    )}
+                    {n.pasta_url && (
+                      <>
+                        {" · "}
+                        <a href={n.pasta_url} target="_blank" rel="noreferrer" className="text-brand underline">pasta</a>
                       </>
                     )}
                   </p>
