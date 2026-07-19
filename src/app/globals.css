@@ -131,10 +131,13 @@ textarea:focus {
     visibility: hidden !important;
   }
   #orc-print,
-  #orc-print * {
+  #orc-print *,
+  #fin-print,
+  #fin-print * {
     visibility: visible !important;
   }
-  #orc-print {
+  #orc-print,
+  #fin-print {
     position: absolute;
     left: 0;
     top: 0;

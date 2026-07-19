@@ -1,3 +1,61 @@
+# Atualização 9 — Módulo Financeiro
+
+Adiciona ao menu lateral o item **Financeiro**, com sete abas: Fluxo de Caixa,
+Contas a Pagar, Contas a Receber, Cartão de Crédito, Pró-labore, Notas Fiscais
+e Despesas Fixas. São **2 passos** para colocar no ar.
+
+## Passo 1 — Atualizar o banco (1 minuto)
+
+1. Entre no **Supabase** → seu projeto → **SQL Editor** → **New query**.
+2. Abra o arquivo **`supabase/migration-financeiro.sql`** (vem neste zip),
+   copie TODO o conteúdo, cole e clique em **Run**.
+3. Deve aparecer **Success**. Isso cria as tabelas `fornecedores`,
+   `despesas_fixas`, `contas_pagar`, `contas_receber`, `pro_labore` e
+   `notas_fiscais`, já compartilhadas com toda a equipe (mesmo padrão do
+   restante do sistema).
+
+> Seguro rodar mesmo com dados existentes: nada é apagado.
+
+## Passo 2 — Subir o código (GitHub → Vercel)
+
+1. No GitHub, abra o repositório do Project Ar.
+2. Arraste os arquivos deste zip para a raiz do repositório (mesmo processo
+   de sempre) — os arquivos com o mesmo nome são substituídos, os novos são
+   adicionados.
+3. **Commit changes.** A Vercel republica sozinha em ~2 minutos.
+
+## Como usar
+
+- **Contas a Pagar / a Receber:** clique em **+ Novo lançamento**. Ao
+  escolher fornecedor ou cliente, dá para cadastrar um novo na hora com o
+  botão **+ novo**, sem sair da tela.
+- **Cartão de Crédito** é a mesma tabela de Contas a Pagar, filtrada pelo
+  tipo "Cartão de Crédito" — lance a fatura do mês como um lançamento normal.
+- **Despesas Fixas:** cadastre Contabilidade, DAS, DARF, Convênio etc. com o
+  dia de vencimento. Na aba **Fluxo de Caixa**, o botão **"Gerar despesas
+  fixas do mês"** cria os lançamentos do mês em Contas a Pagar (não duplica
+  se já tiverem sido gerados). Edite ou exclua cada lançamento gerado sem
+  afetar os meses seguintes.
+- **Relatório mensal:** na aba **Fluxo de Caixa**, clique em **"Relatório
+  mensal (contabilidade)"**, escolha o mês e depois **Baixar PDF** (usa a
+  função de impressão do navegador, o mesmo recurso já usado para os
+  orçamentos). O relatório traz só o que foi **pago**/**recebido** no mês,
+  o pró-labore, subtotais, identificação da Project Ar Ltda e o rodapé de
+  confidencialidade — sem data/hora de geração.
+
+### Simplificações desta primeira versão (avise se quiser evoluir)
+
+- A geração das despesas fixas do mês é feita pelo botão citado acima; não
+  há ainda uma rotina automática 100% sem clique (cron) publicando isso
+  sozinha todo dia 1º — dá para adicionar depois com um Vercel Cron.
+- Os links de comprovante/pasta abrem a URL que você colar (nuvem, Drive
+  etc.) diretamente em nova aba, em vez de uma página própria de
+  visualização — mais simples e já cobre o caso de uso principal.
+- O relatório mensal não gera o `.zip` de anexos automaticamente; o PDF já
+  traz os links de cada comprovante.
+
+---
+
 # Atualização — visual premium + RT + upload de documentos
 
 Você já tem o app no ar. Para aplicar esta versão nova, são só **2 passos**.

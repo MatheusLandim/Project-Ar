@@ -17,6 +17,7 @@ import { OrcamentosView } from "@/components/views/OrcamentosView";
 import { PagamentosView } from "@/components/views/PagamentosView";
 import { RtView } from "@/components/views/RtView";
 import { DocumentosView } from "@/components/views/DocumentosView";
+import { FinanceiroView } from "@/components/views/FinanceiroView";
 
 const TITULOS: Record<View, { t: string; s: string }> = {
   overview: { t: "Visão geral", s: "Resumo de contratos, recebimentos e alertas." },
@@ -26,6 +27,10 @@ const TITULOS: Record<View, { t: string; s: string }> = {
   pagamentos: { t: "Recebimentos", s: "Tudo o que você recebe pelas obras, em um só lugar." },
   rt: { t: "RT / ART", s: "Taxas de responsabilidade técnica que você paga." },
   documentos: { t: "Documentos", s: "Notas fiscais e boletos anexados." },
+  financeiro: {
+    t: "Financeiro",
+    s: "Contas a pagar, a receber, cartão, pró-labore e relatório mensal.",
+  },
 };
 
 export default function DashboardClient({ userEmail }: { userEmail: string }) {
@@ -85,6 +90,7 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
         "pagamentos",
         "rt",
         "documentos",
+        "financeiro",
       ];
       if (saved && validas.includes(saved as View)) setView(saved as View);
     } catch {}
@@ -308,8 +314,10 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
             <PagamentosView projetos={projetos} reload={load} />
           ) : view === "rt" ? (
             <RtView projetos={projetos} reload={load} />
-          ) : (
+          ) : view === "documentos" ? (
             <DocumentosView projetos={projetos} reload={load} />
+          ) : (
+            <FinanceiroView clientes={clientes} projetos={projetos} />
           )}
         </div>
       </main>

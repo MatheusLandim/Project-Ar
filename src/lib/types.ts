@@ -167,3 +167,160 @@ export function rtValor(p: Projeto): number {
 export function artValor(p: Projeto): number {
   return Number(p.art_valor) || 0;
 }
+
+// ===================== Módulo Financeiro =====================
+
+export type Fornecedor = {
+  id: string;
+  nome: string;
+  cnpj_cpf: string | null;
+  categoria: string | null;
+  pasta_url: string | null;
+  criado_em: string;
+};
+
+export type DespesaFixa = {
+  id: string;
+  descricao: string;
+  categoria: string | null;
+  valor: number | null;
+  dia_vencimento: number;
+  pasta_url: string | null;
+  ativo: boolean;
+  criado_em: string;
+};
+
+export type VinculoTipo = "obra" | "empresa" | "despesa_fixa" | "nenhum";
+export type TipoContaPagar =
+  | "boleto"
+  | "nota_fiscal"
+  | "despesa_extra"
+  | "cartao_credito";
+
+export type ContaPagar = {
+  id: string;
+  tipo: TipoContaPagar;
+  descricao: string;
+  fornecedor_id: string | null;
+  categoria: string | null;
+  valor: number;
+  vencimento: string | null;
+  data_pagamento: string | null;
+  forma_pagamento: string | null;
+  anexo_url: string | null;
+  obra_id: string | null;
+  vinculo_tipo: VinculoTipo;
+  vinculo_id: string | null;
+  pasta_url: string | null;
+  despesa_fixa_id: string | null;
+  observacoes: string | null;
+  criado_em: string;
+};
+
+export type TipoContaReceber = "boleto" | "pix" | "nota_fiscal";
+
+export type ContaReceber = {
+  id: string;
+  cliente_id: string | null;
+  obra_id: string | null;
+  tipo: TipoContaReceber;
+  valor: number;
+  vencimento: string | null;
+  data_recebimento: string | null;
+  numero_nf: string | null;
+  anexo_url: string | null;
+  pasta_url: string | null;
+  observacoes: string | null;
+  criado_em: string;
+};
+
+export type ProLabore = {
+  id: string;
+  mes_referencia: string;
+  valor: number;
+  data_pagamento: string | null;
+  comprovante_url: string | null;
+  criado_em: string;
+};
+
+export type NotaFiscal = {
+  id: string;
+  direcao: "emitida" | "recebida";
+  numero: string | null;
+  tipo: "servico" | "produto";
+  cliente_fornecedor: string | null;
+  valor: number;
+  data_emissao: string | null;
+  impostos: number | null;
+  status: "emitida" | "cancelada";
+  arquivo_url: string | null;
+  criado_em: string;
+};
+
+export type FinanceiroStatus = "pago" | "pendente" | "atrasado";
+
+export function contaPagarStatus(c: ContaPagar): FinanceiroStatus {
+  if (c.data_pagamento) return "pago";
+  if (!c.vencimento) return "pendente";
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const venc = new Date(c.vencimento + "T00:00:00");
+  return venc < hoje ? "atrasado" : "pendente";
+}
+
+export function contaReceberStatus(c: ContaReceber): FinanceiroStatus {
+  if (c.data_recebimento) return "pago";
+  if (!c.vencimento) return "pendente";
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const venc = new Date(c.vencimento + "T00:00:00");
+  return venc < hoje ? "atrasado" : "pendente";
+}
+
+export const TIPOS_CONTA_PAGAR: Record<TipoContaPagar, string> = {
+  boleto: "Boleto",
+  nota_fiscal: "Nota Fiscal",
+  despesa_extra: "Despesa Extra",
+  cartao_credito: "Cartão de Crédito",
+};
+
+export const TIPOS_CONTA_RECEBER: Record<TipoContaReceber, string> = {
+  boleto: "Boleto",
+  pix: "Pix",
+  nota_fiscal: "Nota Fiscal",
+};
+
+export const VINCULOS: Record<VinculoTipo, string> = {
+  obra: "Obra",
+  empresa: "Empresa",
+  despesa_fixa: "Despesa Fixa",
+  nenhum: "Nenhum",
+};
+
+export const CATEGORIAS_DESPESA = [
+  "Contabilidade",
+  "DAS",
+  "DARF",
+  "Convênio",
+  "Cartão de Crédito",
+  "Material",
+  "Ferramenta",
+  "Serviço",
+  "Aluguel",
+  "Outros",
+];
+
+export function mesReferenciaAtual(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export function labelMesReferencia(mes: string): string {
+  const [ano, m] = mes.split("-");
+  const nomes = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+  ];
+  const idx = Number(m) - 1;
+  return `${nomes[idx] ?? m}/${ano}`;
+}

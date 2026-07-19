@@ -10,7 +10,8 @@ export type View =
   | "orcamentos"
   | "pagamentos"
   | "rt"
-  | "documentos";
+  | "documentos"
+  | "financeiro";
 
 const ITEMS: {
   id: View;
@@ -24,6 +25,7 @@ const ITEMS: {
   { id: "pagamentos", label: "Recebimentos", icon: <IconCash /> },
   { id: "rt", label: "RT / ART", icon: <IconBadge /> },
   { id: "documentos", label: "Documentos", icon: <IconDoc /> },
+  { id: "financeiro", label: "Financeiro", icon: <IconWallet /> },
 ];
 
 export function Sidebar({
@@ -177,6 +179,15 @@ function IconUsers() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
       <circle cx="9" cy="8" r="3.2" stroke="currentColor" strokeWidth="2" />      <path d="M3.5 19a5.5 5.5 0 0 1 11 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       <path d="M16 5.2a3.2 3.2 0 0 1 0 5.6M17.5 19a5.5 5.5 0 0 0-2-4.3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+function IconWallet() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M3 7a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3 7v11a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1H6a2 2 0 0 1-2-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="16.5" cy="14" r="1.2" fill="currentColor" />
     </svg>
   );
 }
