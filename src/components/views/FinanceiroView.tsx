@@ -75,6 +75,7 @@ export function FinanceiroView({
 }) {
   const supabase = createClient();
   const [tab, setTab] = useState<Tab>("fluxo");
+  const [mesSelecionado, setMesSelecionado] = useState(mesReferenciaAtual());
 
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [despesasFixas, setDespesasFixas] = useState<DespesaFixa[]>([]);
@@ -248,7 +249,7 @@ export function FinanceiroView({
   // ---------- Gerar lançamentos do mês (despesas fixas) ----------
   async function gerarLancamentosDoMes() {
     setGerando(true);
-    const mes = mesReferenciaAtual();
+    const mes = mesSelecionado;
     const ano = Number(mes.split("-")[0]);
     const mesNum = Number(mes.split("-")[1]);
     const ativas = despesasFixas.filter((d) => d.ativo);
@@ -316,13 +317,12 @@ export function FinanceiroView({
     return [...nativas, ...deObras].sort((a, b) => (a.vencimento ?? "9999").localeCompare(b.vencimento ?? "9999"));
   }, [contasReceber, projetos, clientes]);
 
-  // ---------- Totais / Fluxo de caixa (mês atual) ----------
-  const mesAtual = mesReferenciaAtual();
+  // ---------- Totais / Fluxo de caixa (mês selecionado) ----------
   const totais = useMemo(() => {
-    const doMes = (data: string | null) => !!data && data.startsWith(mesAtual);
+    const doMes = (data: string | null) => !!data && data.startsWith(mesSelecionado);
     let aPagar = 0, pago = 0, atrasadoPagar = 0;
     for (const c of contasPagar) {
-      if (!c.vencimento?.startsWith(mesAtual) && !doMes(c.data_pagamento)) continue;
+      if (!c.vencimento?.startsWith(mesSelecionado) && !doMes(c.data_pagamento)) continue;
       const st = contaPagarStatus(c);
       if (st === "pago") pago += Number(c.valor);
       else if (st === "atrasado") atrasadoPagar += Number(c.valor);
@@ -330,17 +330,17 @@ export function FinanceiroView({
     }
     let aReceber = 0, recebido = 0, atrasadoReceber = 0;
     for (const l of linhasReceber) {
-      if (!l.vencimento?.startsWith(mesAtual) && !doMes(l.dataRecebimento)) continue;
+      if (!l.vencimento?.startsWith(mesSelecionado) && !doMes(l.dataRecebimento)) continue;
       if (l.status === "pago") recebido += l.valor;
       else if (l.status === "atrasado") atrasadoReceber += l.valor;
       else aReceber += l.valor;
     }
     const proLaboreMes = proLabore
-      .filter((p) => p.mes_referencia === mesAtual)
+      .filter((p) => p.mes_referencia === mesSelecionado)
       .reduce((s, p) => s + Number(p.valor), 0);
     const saldo = recebido - (pago + proLaboreMes);
     return { aPagar, pago, atrasadoPagar, aReceber, recebido, atrasadoReceber, proLaboreMes, saldo };
-  }, [contasPagar, linhasReceber, proLabore, mesAtual]);
+  }, [contasPagar, linhasReceber, proLabore, mesSelecionado]);
 
   const nomeFornecedor = (id: string | null) =>
     fornecedores.find((f) => f.id === id)?.nome ?? "—";
@@ -378,7 +378,8 @@ export function FinanceiroView({
       {tab === "fluxo" && (
         <FluxoCaixaTab
           totais={totais}
-          mesAtual={mesAtual}
+          mesSelecionado={mesSelecionado}
+          onMudarMes={setMesSelecionado}
           onGerarLancamentos={gerarLancamentosDoMes}
           gerando={gerando}
           onVerRelatorio={() => setShowRelatorio(true)}
@@ -548,7 +549,7 @@ export function FinanceiroView({
       )}
       {showRelatorio && (
         <RelatorioMensalViewer
-          mes={mesAtual}
+          mes={mesSelecionado}
           contasPagar={contasPagar}
           recebiveis={linhasReceber}
           proLabore={proLabore}
@@ -582,7 +583,8 @@ export function FinanceiroView({
 
 function FluxoCaixaTab({
   totais,
-  mesAtual,
+  mesSelecionado,
+  onMudarMes,
   onGerarLancamentos,
   gerando,
   onVerRelatorio,
@@ -592,7 +594,8 @@ function FluxoCaixaTab({
     aReceber: number; recebido: number; atrasadoReceber: number;
     proLaboreMes: number; saldo: number;
   };
-  mesAtual: string;
+  mesSelecionado: string;
+  onMudarMes: (mes: string) => void;
   onGerarLancamentos: () => void;
   gerando: boolean;
   onVerRelatorio: () => void;
@@ -600,16 +603,34 @@ function FluxoCaixaTab({
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-ink-soft">
-          Resumo de <strong className="text-ink">{labelMesReferencia(mesAtual)}</strong>
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm text-ink-soft">
+            Resumo de <strong className="text-ink">{labelMesReferencia(mesSelecionado)}</strong>
+          </p>
+          <input
+            type="month"
+            value={mesSelecionado}
+            onChange={(e) => e.target.value && onMudarMes(e.target.value)}
+            className="t-colors rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-ink"
+            title="Escolha o mês do resumo, do relatório e da geração de despesas fixas"
+          />
+          {mesSelecionado !== mesReferenciaAtual() && (
+            <button
+              onClick={() => onMudarMes(mesReferenciaAtual())}
+              className="t-colors rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand hover:bg-brand-soft"
+            >
+              Voltar ao mês atual
+            </button>
+          )}
+        </div>
         <div className="flex flex-wrap gap-2">
           <button
             onClick={onGerarLancamentos}
             disabled={gerando}
             className="t-colors rounded-lg border border-line px-3.5 py-2 text-sm font-medium text-ink-soft hover:bg-ink/5 disabled:opacity-60"
+            title={`Gera as despesas fixas para ${labelMesReferencia(mesSelecionado)}`}
           >
-            {gerando ? "Gerando…" : "Gerar despesas fixas do mês"}
+            {gerando ? "Gerando…" : `Gerar despesas fixas de ${labelMesReferencia(mesSelecionado)}`}
           </button>
           <button
             onClick={onVerRelatorio}
@@ -622,12 +643,12 @@ function FluxoCaixaTab({
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <MiniStat label="A pagar" value={brl(totais.aPagar)} tone="amber" />
-        <MiniStat label="Pago no mês" value={brl(totais.pago)} tone="emerald" />
+        <MiniStat label="Pago no período" value={brl(totais.pago)} tone="emerald" />
         <MiniStat label="A receber" value={brl(totais.aReceber)} tone="amber" />
-        <MiniStat label="Recebido no mês" value={brl(totais.recebido)} tone="emerald" />
+        <MiniStat label="Recebido no período" value={brl(totais.recebido)} tone="emerald" />
         <MiniStat label="Atrasados (pagar)" value={brl(totais.atrasadoPagar)} tone="rose" />
         <MiniStat label="Atrasados (receber)" value={brl(totais.atrasadoReceber)} tone="rose" />
-        <MiniStat label="Pró-labore do mês" value={brl(totais.proLaboreMes)} tone="amber" />
+        <MiniStat label="Pró-labore do período" value={brl(totais.proLaboreMes)} tone="amber" />
         <MiniStat
           label="Saldo (recebido − pago)"
           value={brl(totais.saldo)}
