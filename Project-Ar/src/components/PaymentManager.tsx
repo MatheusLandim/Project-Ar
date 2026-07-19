@@ -59,9 +59,9 @@ export function PaymentManager({
   }
 
   return (
-    <div className="rounded-xl border border-line bg-canvas/60 p-4">
+    <div className="rounded-xl border border-line bg-canvas/40 p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h4 className="text-sm font-semibold text-ink">Pagamentos</h4>
+        <h4 className="text-sm font-semibold text-ink">Recebimentos</h4>
         <div className="flex items-center gap-3 text-xs text-ink-soft">
           <span className="tnum">
             Lançado: <strong className="text-ink">{brl(totalLancado)}</strong>
@@ -69,20 +69,21 @@ export function PaymentManager({
           <span
             className={`tnum ${
               Math.abs(saldo) < 0.01
-                ? "text-emerald-700"
+                ? "text-emerald-500"
                 : saldo > 0
-                ? "text-amber-700"
-                : "text-rose-700"
+                ? "text-amber-500"
+                : "text-rose-500"
             }`}
           >
-            {saldo >= 0 ? "A lançar" : "Excedente"}: <strong>{brl(Math.abs(saldo))}</strong>
+            {saldo >= 0 ? "A lançar" : "Excedente"}:{" "}
+            <strong>{brl(Math.abs(saldo))}</strong>
           </span>
         </div>
       </div>
 
       {pagamentos.length === 0 && !adding && (
         <p className="py-2 text-sm text-ink-soft">
-          Nenhum pagamento lançado. Cadastre as parcelas ou a entrada deste
+          Nenhum recebimento lançado. Cadastre as parcelas ou a entrada deste
           projeto.
         </p>
       )}
@@ -102,7 +103,7 @@ export function PaymentManager({
                 <p className="text-xs text-ink-soft">
                   Vence {formatDate(p.data_vencimento)}
                   {p.data_pagamento && (
-                    <> · pago em {formatDate(p.data_pagamento)}</>
+                    <> · recebido em {formatDate(p.data_pagamento)}</>
                   )}
                 </p>
               </div>
@@ -113,18 +114,17 @@ export function PaymentManager({
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => togglePago(p.id, !!p.data_pagamento)}
-                  className={`rounded-md px-2 py-1 text-xs font-medium ${
+                  className={`t-colors rounded-md px-2 py-1 text-xs font-medium ${
                     p.data_pagamento
-                      ? "text-ink-soft hover:bg-slate-200"
+                      ? "text-ink-soft hover:bg-ink/5"
                       : "bg-emerald-600 text-white hover:bg-emerald-700"
                   }`}
                 >
-                  {p.data_pagamento ? "Reabrir" : "Dar baixa"}
+                  {p.data_pagamento ? "Reabrir" : "Receber"}
                 </button>
                 <button
                   onClick={() => removePagamento(p.id)}
-                  className="rounded-md px-2 py-1 text-xs text-rose-600 hover:bg-rose-50"
-                  aria-label="Excluir pagamento"
+                  className="t-colors rounded-md px-2 py-1 text-xs text-rose-500 hover:bg-rose-500/10"
                 >
                   Excluir
                 </button>
@@ -137,13 +137,13 @@ export function PaymentManager({
       {adding ? (
         <form
           onSubmit={addPagamento}
-          className="mt-3 grid grid-cols-1 gap-2 rounded-lg border border-line bg-white p-3 sm:grid-cols-[1fr_140px_150px_auto]"
+          className="mt-3 grid grid-cols-1 gap-2 rounded-lg border border-line bg-surface p-3 sm:grid-cols-[1fr_140px_150px_auto]"
         >
           <input
             value={desc}
             onChange={(e) => setDesc(e.target.value)}
             placeholder="Descrição (ex.: Entrada, Parcela 1)"
-            className="rounded-md border border-line px-2.5 py-2 text-sm"
+            className="rounded-md border border-line bg-surface px-2.5 py-2 text-sm text-ink"
           />
           <input
             type="number"
@@ -153,26 +153,26 @@ export function PaymentManager({
             value={valor}
             onChange={(e) => setValor(e.target.value)}
             placeholder="Valor"
-            className="tnum rounded-md border border-line px-2.5 py-2 text-sm"
+            className="tnum rounded-md border border-line bg-surface px-2.5 py-2 text-sm text-ink"
           />
           <input
             type="date"
             value={venc}
             onChange={(e) => setVenc(e.target.value)}
-            className="rounded-md border border-line px-2.5 py-2 text-sm"
+            className="rounded-md border border-line bg-surface px-2.5 py-2 text-sm text-ink"
           />
           <div className="flex gap-2">
             <button
               type="submit"
               disabled={busy}
-              className="rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60"
+              className="t-colors rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60"
             >
               Add
             </button>
             <button
               type="button"
               onClick={() => setAdding(false)}
-              className="rounded-md px-2 py-2 text-sm text-ink-soft hover:bg-slate-100"
+              className="t-colors rounded-md px-2 py-2 text-sm text-ink-soft hover:bg-ink/5"
             >
               ✕
             </button>
@@ -181,9 +181,9 @@ export function PaymentManager({
       ) : (
         <button
           onClick={() => setAdding(true)}
-          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-dashed border-brand/40 px-3 py-2 text-sm font-medium text-brand hover:bg-brand-soft"
+          className="t-colors mt-3 inline-flex items-center gap-1.5 rounded-lg border border-dashed border-brand/50 px-3 py-2 text-sm font-medium text-brand hover:bg-brand-soft"
         >
-          + Lançar pagamento
+          + Lançar recebimento
         </button>
       )}
     </div>

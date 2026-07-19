@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Logo } from "@/components/Logo";
+import { LogoMark } from "@/components/Logo";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -49,13 +50,24 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="grid min-h-screen place-items-center px-4 py-10">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 flex justify-center">
-          <Logo />
+    <main className="app-bg grid min-h-screen place-items-center px-4 py-10">
+      <div className="absolute right-4 top-4 z-10">
+        <ThemeToggle />
+      </div>
+
+      <div className="relative z-10 w-full max-w-sm animate-fade-up">
+        <div className="mb-8 flex flex-col items-center text-center">
+          <LogoMark className="h-20 w-20 drop-shadow-[0_10px_30px_rgba(96,162,219,0.45)]" />
+          <div className="mt-4 font-display text-2xl font-extrabold tracking-tight">
+            <span className="text-ink">PROJECT</span>
+            <span className="text-brand"> AR</span>
+          </div>
+          <div className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.24em] text-ink-faint">
+            Um novo mundo de refrigeração
+          </div>
         </div>
 
-        <div className="rounded-2xl border border-line bg-surface p-7 shadow-card">
+        <div className="rounded-3xl glass-strong p-7 shadow-card">
           <h1 className="font-display text-xl font-bold text-ink">
             {mode === "login" ? "Entrar na sua conta" : "Criar conta"}
           </h1>
@@ -73,7 +85,7 @@ export default function LoginPage() {
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-line bg-white px-3 py-2.5 text-sm"
+                className={input}
                 placeholder="voce@projectar.com.br"
               />
             </Field>
@@ -87,18 +99,18 @@ export default function LoginPage() {
                 }
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-lg border border-line bg-white px-3 py-2.5 text-sm"
+                className={input}
                 placeholder="••••••••"
               />
             </Field>
 
             {err && (
-              <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-sm text-rose-500">
                 {err}
               </p>
             )}
             {msg && (
-              <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+              <p className="rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-500">
                 {msg}
               </p>
             )}
@@ -106,7 +118,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-lg bg-brand py-2.5 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:opacity-60"
+              className="t-colors w-full rounded-xl bg-brand py-2.5 text-sm font-semibold text-white shadow-glow hover:bg-brand-dark disabled:opacity-60"
             >
               {loading
                 ? "Aguarde…"
@@ -117,27 +129,17 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-5 text-center text-sm text-ink-soft">
-            {mode === "login" ? (
-              <button
-                onClick={() => {
-                  setMode("signup");
-                  setErr(null);
-                }}
-                className="font-medium text-brand hover:underline"
-              >
-                Não tem conta? Criar agora
-              </button>
-            ) : (
-              <button
-                onClick={() => {
-                  setMode("login");
-                  setErr(null);
-                }}
-                className="font-medium text-brand hover:underline"
-              >
-                Já tenho conta — entrar
-              </button>
-            )}
+            <button
+              onClick={() => {
+                setMode(mode === "login" ? "signup" : "login");
+                setErr(null);
+              }}
+              className="font-medium text-brand hover:underline"
+            >
+              {mode === "login"
+                ? "Não tem conta? Criar agora"
+                : "Já tenho conta — entrar"}
+            </button>
           </div>
         </div>
       </div>
@@ -161,6 +163,9 @@ function Field({
     </label>
   );
 }
+
+const input =
+  "w-full rounded-lg border border-line bg-surface px-3 py-2.5 text-sm text-ink t-colors";
 
 function traduzErro(m: string) {
   if (/invalid login credentials/i.test(m)) return "E-mail ou senha incorretos.";
