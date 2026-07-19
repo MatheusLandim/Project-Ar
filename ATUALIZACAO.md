@@ -12,10 +12,14 @@ e Despesas Fixas. São **2 passos** para colocar no ar.
 3. Rode também **`supabase/migration-financeiro-v2.sql`** (mesma forma) —
    ele adiciona a pasta do cliente e o vínculo da nota fiscal com
    cliente/fornecedor.
-4. Deve aparecer **Success** nos dois. Isso cria as tabelas `fornecedores`,
-   `despesas_fixas`, `contas_pagar`, `contas_receber`, `pro_labore` e
-   `notas_fiscais`, já compartilhadas com toda a equipe (mesmo padrão do
-   restante do sistema).
+4. Rode também **`supabase/migration-financeiro-v3.sql`** — cria a tabela
+   `documentos`, usada pelas pastas internas de cliente/fornecedor
+   (comprovante, boleto, nota fiscal, tudo guardado dentro do próprio
+   sistema, no mesmo espaço de arquivos que já é usado nas obras).
+5. Deve aparecer **Success** nos três. Isso cria as tabelas `fornecedores`,
+   `despesas_fixas`, `contas_pagar`, `contas_receber`, `pro_labore`,
+   `notas_fiscais` e `documentos`, já compartilhadas com toda a equipe
+   (mesmo padrão do restante do sistema).
 
 > Seguro rodar mesmo com dados existentes: nada é apagado.
 
@@ -33,13 +37,18 @@ e Despesas Fixas. São **2 passos** para colocar no ar.
   do mês como um lançamento normal. Ele aparece tanto na lista geral de
   **Contas a Pagar** quanto na aba dedicada **Cartão de Crédito** (é só um
   filtro de conveniência, o dado é o mesmo).
-- **Pastas de cliente/fornecedor:** cadastre a pasta uma vez no cliente
-  (tela **Clientes**, ou no "+ novo" rápido) ou no fornecedor (no "+ novo"
-  rápido dentro de Contas a Pagar). A partir daí, todo lançamento — Contas
-  a Pagar, Contas a Receber e Nota Fiscal — puxa essa pasta automaticamente
-  ao selecionar o cliente/fornecedor, então notas, boletos e comprovantes
-  ficam todos apontando pro mesmo lugar. Ainda dá pra ajustar manualmente
-  em cada lançamento se precisar.
+- **Pasta interna (arquivos dentro do sistema):** cada cliente e cada
+  fornecedor agora tem uma pasta de verdade dentro do app — não é mais só
+  um link externo. Clique em **📁 Pasta** na ficha do cliente (tela
+  **Clientes**) ou do fornecedor (aba **Financeiro → Fornecedores**) pra
+  ver, enviar e organizar notas fiscais, boletos e comprovantes desse
+  cliente/fornecedor, tudo num único lugar. Nos lançamentos de **Contas a
+  Pagar**, **Contas a Receber** e **Notas Fiscais**, o mesmo botão **📁**
+  aparece direto na linha — clicar nele já abre a pasta do
+  fornecedor/cliente daquele lançamento, sem precisar navegar até a ficha.
+  O campo antigo "Link da pasta (nuvem)" continua disponível nos
+  formulários para quem prefere linkar uma pasta externa (Drive etc.), mas
+  a pasta interna é o jeito recomendado a partir de agora.
 - **Contas a Pagar / a Receber:** clique em **+ Novo lançamento**. Ao
   escolher fornecedor ou cliente, dá para cadastrar um novo na hora com o
   botão **+ novo**, sem sair da tela.

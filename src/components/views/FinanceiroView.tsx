@@ -37,6 +37,8 @@ import {
   ClienteQuickInput,
 } from "@/components/FinanceiroForms";
 import { RelatorioMensalViewer } from "@/components/RelatorioFinanceiroDoc";
+import { PastaEntidade } from "@/components/PastaEntidade";
+import { EntidadeTipo } from "@/lib/types";
 
 type Tab =
   | "fluxo"
@@ -45,7 +47,8 @@ type Tab =
   | "cartao"
   | "prolabore"
   | "notas"
-  | "despesas";
+  | "despesas"
+  | "fornecedores";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "fluxo", label: "Fluxo de Caixa" },
@@ -55,6 +58,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "prolabore", label: "Pró-labore" },
   { id: "notas", label: "Notas Fiscais" },
   { id: "despesas", label: "Despesas Fixas" },
+  { id: "fornecedores", label: "Fornecedores" },
 ];
 
 export function FinanceiroView({
@@ -118,6 +122,7 @@ export function FinanceiroView({
   const [showCliente, setShowCliente] = useState(false);
   const [showRelatorio, setShowRelatorio] = useState(false);
   const [gerando, setGerando] = useState(false);
+  const [showPasta, setShowPasta] = useState<{ tipo: EntidadeTipo; id: string; nome: string } | null>(null);
 
   // ---------- CRUD: Contas a Pagar ----------
   async function salvarPagar(data: ContaPagarInput) {
@@ -335,6 +340,10 @@ export function FinanceiroView({
           onEdit={(c) => { setEditPagar(c); setShowPagar(true); }}
           onDelete={excluirPagar}
           onBaixar={baixarPagar}
+          onAbrirPasta={(c) => {
+            const f = fornecedores.find((x) => x.id === c.fornecedor_id);
+            if (f) setShowPasta({ tipo: "fornecedor", id: f.id, nome: f.nome });
+          }}
         />
       )}
 
@@ -347,6 +356,10 @@ export function FinanceiroView({
           onDelete={excluirPagar}
           onBaixar={baixarPagar}
           tituloVazio="Nenhuma despesa de cartão de crédito lançada."
+          onAbrirPasta={(c) => {
+            const f = fornecedores.find((x) => x.id === c.fornecedor_id);
+            if (f) setShowPasta({ tipo: "fornecedor", id: f.id, nome: f.nome });
+          }}
         />
       )}
 
@@ -358,6 +371,10 @@ export function FinanceiroView({
           onEdit={(c) => { setEditReceber(c); setShowReceber(true); }}
           onDelete={excluirReceber}
           onBaixar={baixarReceber}
+          onAbrirPasta={(c) => {
+            const cli = clientes.find((x) => x.id === c.cliente_id);
+            if (cli) setShowPasta({ tipo: "cliente", id: cli.id, nome: cli.nome });
+          }}
         />
       )}
 
@@ -376,6 +393,15 @@ export function FinanceiroView({
           onNew={() => { setEditNota(undefined); setShowNota(true); }}
           onEdit={(n) => { setEditNota(n); setShowNota(true); }}
           onDelete={excluirNota}
+          onAbrirPasta={(n) => {
+            if (n.direcao === "emitida" && n.cliente_id) {
+              const cli = clientes.find((x) => x.id === n.cliente_id);
+              if (cli) setShowPasta({ tipo: "cliente", id: cli.id, nome: cli.nome });
+            } else if (n.direcao === "recebida" && n.fornecedor_id) {
+              const f = fornecedores.find((x) => x.id === n.fornecedor_id);
+              if (f) setShowPasta({ tipo: "fornecedor", id: f.id, nome: f.nome });
+            }
+          }}
         />
       )}
 
@@ -385,6 +411,14 @@ export function FinanceiroView({
           onNew={() => { setEditDespesa(undefined); setShowDespesa(true); }}
           onEdit={(d) => { setEditDespesa(d); setShowDespesa(true); }}
           onDelete={excluirDespesa}
+        />
+      )}
+
+      {tab === "fornecedores" && (
+        <FornecedoresTab
+          fornecedores={fornecedores}
+          onNew={() => setShowFornecedor(true)}
+          onAbrirPasta={(f) => setShowPasta({ tipo: "fornecedor", id: f.id, nome: f.nome })}
         />
       )}
 
@@ -446,6 +480,14 @@ export function FinanceiroView({
           nomeFornecedor={nomeFornecedor}
           nomeCliente={nomeCliente}
           onClose={() => setShowRelatorio(false)}
+        />
+      )}
+      {showPasta && (
+        <PastaEntidade
+          entidadeTipo={showPasta.tipo}
+          entidadeId={showPasta.id}
+          nomeEntidade={showPasta.nome}
+          onClose={() => setShowPasta(null)}
         />
       )}
     </div>
@@ -543,6 +585,7 @@ function ContasPagarTab({
   onEdit,
   onDelete,
   onBaixar,
+  onAbrirPasta,
   tituloVazio,
 }: {
   contas: ContaPagar[];
@@ -551,6 +594,7 @@ function ContasPagarTab({
   onEdit: (c: ContaPagar) => void;
   onDelete: (c: ContaPagar) => void;
   onBaixar: (c: ContaPagar) => void;
+  onAbrirPasta: (c: ContaPagar) => void;
   tituloVazio?: string;
 }) {
   const [filtro, setFiltro] = useState<"todos" | "atrasado" | "pendente" | "pago">("todos");
@@ -578,22 +622,19 @@ function ContasPagarTab({
                     <p className="text-xs text-ink-soft">
                       {nomeFornecedor(c.fornecedor_id)} · vence {formatDate(c.vencimento)}
                       {c.data_pagamento && <> · pago {formatDate(c.data_pagamento)}</>}
-                      {c.pasta_url && (
-                        <>
-                          {" · "}
-                          <a href={c.pasta_url} target="_blank" rel="noreferrer" className="text-brand underline">pasta</a>
-                        </>
-                      )}
-                      {c.anexo_url && (
-                        <>
-                          {" · "}
-                          <a href={c.anexo_url} target="_blank" rel="noreferrer" className="text-brand underline">comprovante</a>
-                        </>
-                      )}
                     </p>
                   </div>
                   <span className="tnum text-sm font-semibold text-ink">{brl(Number(c.valor))}</span>
                   <StatusBadge status={st} kind="pagamento" />
+                  {c.fornecedor_id && (
+                    <button
+                      onClick={() => onAbrirPasta(c)}
+                      title="Abrir pasta do fornecedor"
+                      className="t-colors rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5"
+                    >
+                      📁
+                    </button>
+                  )}
                   <button
                     onClick={() => onBaixar(c)}
                     className={`t-colors rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
@@ -623,6 +664,7 @@ function ContasReceberTab({
   onEdit,
   onDelete,
   onBaixar,
+  onAbrirPasta,
 }: {
   contas: ContaReceber[];
   nomeCliente: (id: string | null) => string;
@@ -630,6 +672,7 @@ function ContasReceberTab({
   onEdit: (c: ContaReceber) => void;
   onDelete: (c: ContaReceber) => void;
   onBaixar: (c: ContaReceber) => void;
+  onAbrirPasta: (c: ContaReceber) => void;
 }) {
   const [filtro, setFiltro] = useState<"todos" | "atrasado" | "pendente" | "pago">("todos");
   const lista = contas.filter((c) => filtro === "todos" || contaReceberStatus(c) === filtro);
@@ -655,16 +698,19 @@ function ContasReceberTab({
                       vence {formatDate(c.vencimento)}
                       {c.data_recebimento && <> · recebido {formatDate(c.data_recebimento)}</>}
                       {c.numero_nf && <> · NF {c.numero_nf}</>}
-                      {c.pasta_url && (
-                        <>
-                          {" · "}
-                          <a href={c.pasta_url} target="_blank" rel="noreferrer" className="text-brand underline">pasta</a>
-                        </>
-                      )}
                     </p>
                   </div>
                   <span className="tnum text-sm font-semibold text-ink">{brl(Number(c.valor))}</span>
                   <StatusBadge status={st} kind="pagamento" />
+                  {c.cliente_id && (
+                    <button
+                      onClick={() => onAbrirPasta(c)}
+                      title="Abrir pasta do cliente"
+                      className="t-colors rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5"
+                    >
+                      📁
+                    </button>
+                  )}
                   <button
                     onClick={() => onBaixar(c)}
                     className={`t-colors rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
@@ -743,11 +789,13 @@ function NotasFiscaisTab({
   onNew,
   onEdit,
   onDelete,
+  onAbrirPasta,
 }: {
   notas: NotaFiscal[];
   onNew: () => void;
   onEdit: (n: NotaFiscal) => void;
   onDelete: (n: NotaFiscal) => void;
+  onAbrirPasta: (n: NotaFiscal) => void;
 }) {
   return (
     <div>
@@ -776,20 +824,70 @@ function NotasFiscaisTab({
                         <a href={n.arquivo_url} target="_blank" rel="noreferrer" className="text-brand underline">arquivo</a>
                       </>
                     )}
-                    {n.pasta_url && (
-                      <>
-                        {" · "}
-                        <a href={n.pasta_url} target="_blank" rel="noreferrer" className="text-brand underline">pasta</a>
-                      </>
-                    )}
                   </p>
                 </div>
                 <span className="tnum text-sm font-semibold text-ink">{brl(Number(n.valor))}</span>
                 <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${n.status === "cancelada" ? "bg-rose-500/10 text-rose-500" : "bg-emerald-500/10 text-emerald-600"}`}>
                   {n.status === "cancelada" ? "Cancelada" : "Emitida"}
                 </span>
+                {(n.cliente_id || n.fornecedor_id) && (
+                  <button
+                    onClick={() => onAbrirPasta(n)}
+                    title="Abrir pasta"
+                    className="t-colors rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5"
+                  >
+                    📁
+                  </button>
+                )}
                 <button onClick={() => onEdit(n)} className="rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5">✎</button>
                 <button onClick={() => onDelete(n)} className="rounded-lg px-2 py-1.5 text-xs text-rose-500 hover:bg-rose-500/10">🗑</button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ===================== Fornecedores =====================
+
+function FornecedoresTab({
+  fornecedores,
+  onNew,
+  onAbrirPasta,
+}: {
+  fornecedores: Fornecedor[];
+  onNew: () => void;
+  onAbrirPasta: (f: Fornecedor) => void;
+}) {
+  return (
+    <div>
+      <div className="flex justify-end">
+        <button onClick={onNew} className="t-colors rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-glow hover:bg-brand-dark">
+          + Novo fornecedor
+        </button>
+      </div>
+      <div className="mt-4 overflow-hidden rounded-2xl border border-line glass">
+        {fornecedores.length === 0 ? (
+          <p className="p-8 text-center text-sm text-ink-soft">Nenhum fornecedor cadastrado ainda.</p>
+        ) : (
+          <ul className="divide-y divide-line">
+            {fornecedores.map((f) => (
+              <li key={f.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-5">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-ink">{f.nome}</p>
+                  <p className="text-xs text-ink-soft">
+                    {f.categoria || "Sem categoria"}
+                    {f.cnpj_cpf && <> · {f.cnpj_cpf}</>}
+                  </p>
+                </div>
+                <button
+                  onClick={() => onAbrirPasta(f)}
+                  className="t-colors inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink-soft hover:bg-ink/5"
+                >
+                  📁 Pasta
+                </button>
               </li>
             ))}
           </ul>

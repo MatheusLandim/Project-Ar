@@ -328,3 +328,18 @@ export function labelMesReferencia(mes: string): string {
   const idx = Number(m) - 1;
   return `${nomes[idx] ?? m}/${ano}`;
 }
+
+export type EntidadeTipo = "cliente" | "fornecedor";
+
+export type Documento = {
+  id: string;
+  entidade_tipo: EntidadeTipo;
+  entidade_id: string;
+  pasta: string | null;
+  nome: string;
+  path: string;
+  tamanho: number | null;
+  criado_em: string;
+};
+
+export const PASTAS_ENTIDADE = ["Notas Fiscais", "Boletos", "Comprovantes", "Outros"];

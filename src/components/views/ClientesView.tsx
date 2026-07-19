@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Cliente, Projeto, pagamentoStatus } from "@/lib/types";
 import { brl } from "@/lib/format";
+import { PastaEntidade } from "@/components/PastaEntidade";
 
 function projetosDoCliente(c: Cliente, projetos: Projeto[]) {
   const nome = c.nome.trim().toLowerCase();
@@ -28,6 +29,7 @@ export function ClientesView({
 }) {
   const [busca, setBusca] = useState("");
   const [confirmando, setConfirmando] = useState<string | null>(null);
+  const [pastaCliente, setPastaCliente] = useState<Cliente | null>(null);
 
   const lista = useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -109,6 +111,12 @@ export function ClientesView({
                 </div>
                 <div className="flex items-center gap-1">
                   <button
+                    onClick={() => setPastaCliente(c)}
+                    className="t-colors rounded-lg px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/5"
+                  >
+                    📁 Pasta
+                  </button>
+                  <button
                     onClick={() => onEdit(c)}
                     className="t-colors rounded-lg px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/5"
                   >
@@ -153,6 +161,15 @@ export function ClientesView({
           ))
         )}
       </div>
+
+      {pastaCliente && (
+        <PastaEntidade
+          entidadeTipo="cliente"
+          entidadeId={pastaCliente.id}
+          nomeEntidade={pastaCliente.nome}
+          onClose={() => setPastaCliente(null)}
+        />
+      )}
     </div>
   );
 }
