@@ -112,16 +112,17 @@ export type FornecedorInput = {
 };
 
 export function FornecedorQuickForm({
+  initial,
   onCancel,
   onSave,
 }: {
+  initial?: Fornecedor;
   onCancel: () => void;
   onSave: (data: FornecedorInput) => Promise<void>;
 }) {
-  const [nome, setNome] = useState("");
-  const [doc, setDoc] = useState("");
-  const [categoria, setCategoria] = useState("");
-  const [pasta, setPasta] = useState("");
+  const [nome, setNome] = useState(initial?.nome ?? "");
+  const [doc, setDoc] = useState(initial?.cnpj_cpf ?? "");
+  const [categoria, setCategoria] = useState(initial?.categoria ?? "");
   const [saving, setSaving] = useState(false);
 
   async function submit(e: React.FormEvent) {
@@ -131,18 +132,18 @@ export function FornecedorQuickForm({
       nome: nome.trim(),
       cnpj_cpf: doc.trim() || null,
       categoria: categoria.trim() || null,
-      pasta_url: pasta.trim() || null,
+      pasta_url: initial?.pasta_url ?? null,
     });
     setSaving(false);
   }
 
   return (
     <ModalShell
-      title="Novo fornecedor"
+      title={initial ? "Editar fornecedor" : "Novo fornecedor"}
       onCancel={onCancel}
       onSubmit={submit}
       saving={saving}
-      submitLabel="Salvar fornecedor"
+      submitLabel={initial ? "Salvar alterações" : "Salvar fornecedor"}
     >
       <Field label="Nome / Razão social" required>
         <input required value={nome} onChange={(e) => setNome(e.target.value)} className={input} />
@@ -153,9 +154,9 @@ export function FornecedorQuickForm({
       <Field label="Categoria" hint="Ex.: material, ferramenta, serviço">
         <input value={categoria} onChange={(e) => setCategoria(e.target.value)} className={input} />
       </Field>
-      <Field label="Link da pasta (nuvem)">
-        <input value={pasta} onChange={(e) => setPasta(e.target.value)} className={input} placeholder="https://..." />
-      </Field>
+      <p className="text-[11px] text-ink-faint">
+        Notas fiscais, boletos e comprovantes deste fornecedor ficam na pasta interna dele — use o botão 📁 Pasta depois de salvar.
+      </p>
     </ModalShell>
   );
 }
@@ -178,7 +179,6 @@ export function ClienteQuickForm({
 }) {
   const [nome, setNome] = useState("");
   const [doc, setDoc] = useState("");
-  const [pasta, setPasta] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function submit(e: React.FormEvent) {
@@ -188,7 +188,7 @@ export function ClienteQuickForm({
       nome: nome.trim(),
       tipo_pessoa: "PJ",
       documento: doc.trim() || null,
-      pasta_url: pasta.trim() || null,
+      pasta_url: null,
     });
     setSaving(false);
   }
@@ -207,9 +207,9 @@ export function ClienteQuickForm({
       <Field label="CNPJ / CPF">
         <input value={doc} onChange={(e) => setDoc(e.target.value)} className={input} />
       </Field>
-      <Field label="Link da pasta (nuvem)" hint="Notas, boletos e comprovantes deste cliente puxam esse link">
-        <input value={pasta} onChange={(e) => setPasta(e.target.value)} className={input} placeholder="https://..." />
-      </Field>
+      <p className="text-[11px] text-ink-faint">
+        Notas fiscais, boletos e comprovantes deste cliente ficam na pasta interna dele — use o botão 📁 Pasta depois de salvar.
+      </p>
     </ModalShell>
   );
 }
@@ -241,18 +241,10 @@ export function ContaPagarForm({
   const [vencimento, setVencimento] = useState(initial?.vencimento ?? hoje());
   const [dataPagamento, setDataPagamento] = useState(initial?.data_pagamento ?? "");
   const [formaPagamento, setFormaPagamento] = useState(initial?.forma_pagamento ?? "");
-  const [anexoUrl, setAnexoUrl] = useState(initial?.anexo_url ?? "");
   const [vinculoTipo, setVinculoTipo] = useState<VinculoTipo>(initial?.vinculo_tipo ?? "nenhum");
   const [obraId, setObraId] = useState(initial?.obra_id ?? "");
-  const [pastaUrl, setPastaUrl] = useState(initial?.pasta_url ?? "");
   const [observacoes, setObservacoes] = useState(initial?.observacoes ?? "");
   const [saving, setSaving] = useState(false);
-
-  function selecionarFornecedor(id: string) {
-    setFornecedorId(id);
-    const f = fornecedores.find((x) => x.id === id);
-    if (f?.pasta_url && !pastaUrl) setPastaUrl(f.pasta_url);
-  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -266,11 +258,11 @@ export function ContaPagarForm({
       vencimento: vencimento || null,
       data_pagamento: dataPagamento || null,
       forma_pagamento: formaPagamento.trim() || null,
-      anexo_url: anexoUrl.trim() || null,
+      anexo_url: initial?.anexo_url ?? null,
       obra_id: vinculoTipo === "obra" ? obraId || null : null,
       vinculo_tipo: vinculoTipo,
       vinculo_id: vinculoTipo === "obra" ? obraId || null : null,
-      pasta_url: pastaUrl.trim() || null,
+      pasta_url: initial?.pasta_url ?? null,
       despesa_fixa_id: initial?.despesa_fixa_id ?? null,
       observacoes: observacoes.trim() || null,
     });
@@ -325,7 +317,7 @@ export function ContaPagarForm({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Fornecedor">
           <div className="flex gap-2">
-            <select value={fornecedorId ?? ""} onChange={(e) => selecionarFornecedor(e.target.value)} className={input}>
+            <select value={fornecedorId ?? ""} onChange={(e) => setFornecedorId(e.target.value)} className={input}>
               <option value="">— nenhum —</option>
               {fornecedores.map((f) => <option key={f.id} value={f.id}>{f.nome}</option>)}
             </select>
@@ -333,11 +325,6 @@ export function ContaPagarForm({
               + novo
             </button>
           </div>
-          {fornecedorId && fornecedores.find((f) => f.id === fornecedorId)?.pasta_url && (
-            <p className="mt-1 text-[11px] text-ink-faint">
-              Pasta do fornecedor preenchida automaticamente abaixo — pode ajustar se precisar.
-            </p>
-          )}
         </Field>
         <Field label="Vínculo">
           <select value={vinculoTipo} onChange={(e) => setVinculoTipo(e.target.value as VinculoTipo)} className={input}>
@@ -357,12 +344,9 @@ export function ContaPagarForm({
         </Field>
       )}
 
-      <Field label="Link da pasta (nuvem)">
-        <input value={pastaUrl} onChange={(e) => setPastaUrl(e.target.value)} className={input} placeholder="https://..." />
-      </Field>
-      <Field label="Link do comprovante / boleto / nota">
-        <input value={anexoUrl} onChange={(e) => setAnexoUrl(e.target.value)} className={input} placeholder="https://..." />
-      </Field>
+      <p className="text-[11px] text-ink-faint">
+        Comprovante, boleto ou nota fiscal deste lançamento: anexe pelo botão 📎 na lista de Contas a Pagar, depois de salvar.
+      </p>
       <Field label="Observações">
         <textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} rows={2} className={`${input} resize-none`} />
       </Field>
@@ -396,16 +380,8 @@ export function ContaReceberForm({
   const [vencimento, setVencimento] = useState(initial?.vencimento ?? hoje());
   const [dataRecebimento, setDataRecebimento] = useState(initial?.data_recebimento ?? "");
   const [numeroNf, setNumeroNf] = useState(initial?.numero_nf ?? "");
-  const [anexoUrl, setAnexoUrl] = useState(initial?.anexo_url ?? "");
-  const [pastaUrl, setPastaUrl] = useState(initial?.pasta_url ?? "");
   const [observacoes, setObservacoes] = useState(initial?.observacoes ?? "");
   const [saving, setSaving] = useState(false);
-
-  function selecionarCliente(id: string) {
-    setClienteId(id);
-    const c = clientes.find((x) => x.id === id);
-    if (c?.pasta_url && !pastaUrl) setPastaUrl(c.pasta_url);
-  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -418,8 +394,8 @@ export function ContaReceberForm({
       vencimento: vencimento || null,
       data_recebimento: dataRecebimento || null,
       numero_nf: numeroNf.trim() || null,
-      anexo_url: anexoUrl.trim() || null,
-      pasta_url: pastaUrl.trim() || null,
+      anexo_url: initial?.anexo_url ?? null,
+      pasta_url: initial?.pasta_url ?? null,
       observacoes: observacoes.trim() || null,
     });
     setSaving(false);
@@ -435,7 +411,7 @@ export function ContaReceberForm({
     >
       <Field label="Cliente">
         <div className="flex gap-2">
-          <select value={clienteId ?? ""} onChange={(e) => selecionarCliente(e.target.value)} className={input}>
+          <select value={clienteId ?? ""} onChange={(e) => setClienteId(e.target.value)} className={input}>
             <option value="">— nenhum —</option>
             {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
           </select>
@@ -443,11 +419,6 @@ export function ContaReceberForm({
             + novo
           </button>
         </div>
-        {clienteId && clientes.find((c) => c.id === clienteId)?.pasta_url && (
-          <p className="mt-1 text-[11px] text-ink-faint">
-            Pasta do cliente preenchida automaticamente abaixo — pode ajustar se precisar.
-          </p>
-        )}
       </Field>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -478,12 +449,9 @@ export function ContaReceberForm({
         </Field>
       </div>
 
-      <Field label="Link da pasta (nuvem)">
-        <input value={pastaUrl} onChange={(e) => setPastaUrl(e.target.value)} className={input} placeholder="https://..." />
-      </Field>
-      <Field label="Link do comprovante / boleto / nota">
-        <input value={anexoUrl} onChange={(e) => setAnexoUrl(e.target.value)} className={input} placeholder="https://..." />
-      </Field>
+      <p className="text-[11px] text-ink-faint">
+        Comprovante, boleto ou nota fiscal deste lançamento: anexe pelo botão 📎 na lista de Contas a Receber, depois de salvar.
+      </p>
       <Field label="Observações">
         <textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} rows={2} className={`${input} resize-none`} />
       </Field>
@@ -653,25 +621,17 @@ export function NotaFiscalForm({
   const [dataEmissao, setDataEmissao] = useState(initial?.data_emissao ?? hoje());
   const [impostos, setImpostos] = useState(initial?.impostos != null ? String(initial.impostos) : "");
   const [status, setStatus] = useState(initial?.status ?? "emitida");
-  const [arquivoUrl, setArquivoUrl] = useState(initial?.arquivo_url ?? "");
-  const [pastaUrl, setPastaUrl] = useState(initial?.pasta_url ?? "");
   const [saving, setSaving] = useState(false);
 
   function selecionarCliente(id: string) {
     setClienteId(id);
     const c = clientes.find((x) => x.id === id);
-    if (c) {
-      if (!clienteFornecedor) setClienteFornecedor(c.nome);
-      if (c.pasta_url && !pastaUrl) setPastaUrl(c.pasta_url);
-    }
+    if (c && !clienteFornecedor) setClienteFornecedor(c.nome);
   }
   function selecionarFornecedor(id: string) {
     setFornecedorId(id);
     const f = fornecedores.find((x) => x.id === id);
-    if (f) {
-      if (!clienteFornecedor) setClienteFornecedor(f.nome);
-      if (f.pasta_url && !pastaUrl) setPastaUrl(f.pasta_url);
-    }
+    if (f && !clienteFornecedor) setClienteFornecedor(f.nome);
   }
 
   async function submit(e: React.FormEvent) {
@@ -688,8 +648,8 @@ export function NotaFiscalForm({
       data_emissao: dataEmissao || null,
       impostos: impostos.trim() === "" ? null : Number(impostos),
       status,
-      arquivo_url: arquivoUrl.trim() || null,
-      pasta_url: pastaUrl.trim() || null,
+      arquivo_url: initial?.arquivo_url ?? null,
+      pasta_url: initial?.pasta_url ?? null,
     });
     setSaving(false);
   }
@@ -720,14 +680,14 @@ export function NotaFiscalForm({
         </Field>
 
         {direcao === "emitida" ? (
-          <Field label="Cliente" hint="Puxa nome e pasta automaticamente">
+          <Field label="Cliente" hint="Puxa o nome automaticamente">
             <select value={clienteId ?? ""} onChange={(e) => selecionarCliente(e.target.value)} className={input}>
               <option value="">— selecione —</option>
               {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </select>
           </Field>
         ) : (
-          <Field label="Fornecedor" hint="Puxa nome e pasta automaticamente">
+          <Field label="Fornecedor" hint="Puxa o nome automaticamente">
             <select value={fornecedorId ?? ""} onChange={(e) => selecionarFornecedor(e.target.value)} className={input}>
               <option value="">— selecione —</option>
               {fornecedores.map((f) => <option key={f.id} value={f.id}>{f.nome}</option>)}
@@ -751,12 +711,9 @@ export function NotaFiscalForm({
           </select>
         </Field>
       </div>
-      <Field label="Link do arquivo (PDF/XML)">
-        <input value={arquivoUrl} onChange={(e) => setArquivoUrl(e.target.value)} className={input} placeholder="https://..." />
-      </Field>
-      <Field label="Link da pasta (nuvem)" hint="Preenchido automaticamente ao escolher cliente/fornecedor">
-        <input value={pastaUrl} onChange={(e) => setPastaUrl(e.target.value)} className={input} placeholder="https://..." />
-      </Field>
+      <p className="text-[11px] text-ink-faint">
+        Arquivo da nota (PDF/XML): anexe pelo botão 📎 na lista de Notas Fiscais, depois de salvar.
+      </p>
     </ModalShell>
   );
 }

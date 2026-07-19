@@ -11,7 +11,8 @@ export type View =
   | "pagamentos"
   | "rt"
   | "documentos"
-  | "financeiro";
+  | "financeiro"
+  | "fornecedores";
 
 const ITEMS: {
   id: View;
@@ -21,6 +22,7 @@ const ITEMS: {
   { id: "overview", label: "Visão geral", icon: <IconGrid /> },
   { id: "obras", label: "Obras", icon: <IconBuilding /> },
   { id: "clientes", label: "Clientes", icon: <IconUsers /> },
+  { id: "fornecedores", label: "Fornecedores", icon: <IconTruck /> },
   { id: "orcamentos", label: "Orçamentos", icon: <IconQuote /> },
   { id: "pagamentos", label: "Recebimentos", icon: <IconCash /> },
   { id: "rt", label: "RT / ART", icon: <IconBadge /> },
@@ -179,6 +181,16 @@ function IconUsers() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
       <circle cx="9" cy="8" r="3.2" stroke="currentColor" strokeWidth="2" />      <path d="M3.5 19a5.5 5.5 0 0 1 11 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       <path d="M16 5.2a3.2 3.2 0 0 1 0 5.6M17.5 19a5.5 5.5 0 0 0-2-4.3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+function IconTruck() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M2 7h11v10H2z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <path d="M13 10h4l4 3.5V17h-8z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <circle cx="6.5" cy="18.5" r="1.7" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="17" cy="18.5" r="1.7" stroke="currentColor" strokeWidth="1.6" />
     </svg>
   );
 }

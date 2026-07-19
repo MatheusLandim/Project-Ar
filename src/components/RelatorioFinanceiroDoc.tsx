@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import { LogoMark } from "@/components/Logo";
 import {
   ContaPagar,
   ContaReceber,
   ProLabore,
+  Documento,
   labelMesReferencia,
   mesReferenciaAtual,
 } from "@/lib/types";
@@ -20,12 +22,18 @@ const LINE = "#e2e8f0";
 const RAZAO_SOCIAL = "PROJECT AR LTDA";
 const CNPJ = "50.784.117/0001-81";
 
+// Validade do link assinado de cada anexo no PDF (7 dias). Se o relatório
+// for aberto depois disso, é só gerar de novo pela tela de Fluxo de Caixa.
+const VALIDADE_LINK_SEGUNDOS = 60 * 60 * 24 * 7;
+
 function linhasDoMes<T>(itens: T[], mes: string, campoData: (t: T) => string | null) {
   return itens.filter((i) => {
     const d = campoData(i);
     return !!d && d.startsWith(mes);
   });
 }
+
+type AnexoLink = { nome: string; url: string };
 
 export function RelatorioMensalViewer({
   mes: mesInicial,
@@ -44,7 +52,58 @@ export function RelatorioMensalViewer({
   nomeCliente: (id: string | null) => string;
   onClose: () => void;
 }) {
+  const supabase = createClient();
   const [mes, setMes] = useState(mesInicial ?? mesReferenciaAtual());
+  const [anexosPorLancamento, setAnexosPorLancamento] = useState<Record<string, AnexoLink[]>>({});
+  const [carregandoAnexos, setCarregandoAnexos] = useState(true);
+
+  const pagos = useMemo(
+    () => linhasDoMes(contasPagar, mes, (c) => c.data_pagamento),
+    [contasPagar, mes]
+  );
+  const recebidos = useMemo(
+    () => linhasDoMes(contasReceber, mes, (c) => c.data_recebimento),
+    [contasReceber, mes]
+  );
+
+  useEffect(() => {
+    let cancelado = false;
+    async function carregar() {
+      setCarregandoAnexos(true);
+      const idsPagar = pagos.map((c) => c.id);
+      const idsReceber = recebidos.map((c) => c.id);
+      const consultas = [];
+      if (idsPagar.length > 0)
+        consultas.push(
+          supabase.from("documentos").select("*").eq("lancamento_tipo", "pagar").in("lancamento_id", idsPagar)
+        );
+      if (idsReceber.length > 0)
+        consultas.push(
+          supabase.from("documentos").select("*").eq("lancamento_tipo", "receber").in("lancamento_id", idsReceber)
+        );
+      const resultados = await Promise.all(consultas);
+      const docs: Documento[] = resultados.flatMap((r) => (r.data as Documento[]) ?? []);
+
+      const mapa: Record<string, AnexoLink[]> = {};
+      await Promise.all(
+        docs.map(async (d) => {
+          const { data } = await supabase.storage.from("anexos").createSignedUrl(d.path, VALIDADE_LINK_SEGUNDOS);
+          if (!data?.signedUrl || !d.lancamento_id) return;
+          if (!mapa[d.lancamento_id]) mapa[d.lancamento_id] = [];
+          mapa[d.lancamento_id].push({ nome: d.nome, url: data.signedUrl });
+        })
+      );
+      if (!cancelado) {
+        setAnexosPorLancamento(mapa);
+        setCarregandoAnexos(false);
+      }
+    }
+    carregar();
+    return () => {
+      cancelado = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mes, pagos.length, recebidos.length]);
 
   return (
     <div className="fixed inset-0 z-[60] bg-navy/70 backdrop-blur-sm">
@@ -57,11 +116,15 @@ export function RelatorioMensalViewer({
             onChange={(e) => setMes(e.target.value)}
             className="rounded-lg border border-line bg-canvas px-2.5 py-1.5 text-sm text-ink"
           />
+          {carregandoAnexos && (
+            <span className="text-xs text-ink-faint">carregando anexos…</span>
+          )}
         </div>
         <div className="flex gap-2">
           <button
             onClick={() => window.print()}
-            className="t-colors rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-glow hover:bg-brand-dark"
+            disabled={carregandoAnexos}
+            className="t-colors rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-glow hover:bg-brand-dark disabled:opacity-60"
           >
             Baixar PDF
           </button>
@@ -81,11 +144,12 @@ export function RelatorioMensalViewer({
         <div className="shadow-2xl">
           <RelatorioDoc
             mes={mes}
-            contasPagar={contasPagar}
-            contasReceber={contasReceber}
+            pagos={pagos}
+            recebidos={recebidos}
             proLabore={proLabore}
             nomeFornecedor={nomeFornecedor}
             nomeCliente={nomeCliente}
+            anexosPorLancamento={anexosPorLancamento}
           />
         </div>
       </div>
@@ -95,27 +159,21 @@ export function RelatorioMensalViewer({
 
 function RelatorioDoc({
   mes,
-  contasPagar,
-  contasReceber,
+  pagos,
+  recebidos,
   proLabore,
   nomeFornecedor,
   nomeCliente,
+  anexosPorLancamento,
 }: {
   mes: string;
-  contasPagar: ContaPagar[];
-  contasReceber: ContaReceber[];
+  pagos: ContaPagar[];
+  recebidos: ContaReceber[];
   proLabore: ProLabore[];
   nomeFornecedor: (id: string | null) => string;
   nomeCliente: (id: string | null) => string;
+  anexosPorLancamento: Record<string, AnexoLink[]>;
 }) {
-  const pagos = useMemo(
-    () => linhasDoMes(contasPagar, mes, (c) => c.data_pagamento),
-    [contasPagar, mes]
-  );
-  const recebidos = useMemo(
-    () => linhasDoMes(contasReceber, mes, (c) => c.data_recebimento),
-    [contasReceber, mes]
-  );
   const proLaboreMes = useMemo(
     () => proLabore.filter((p) => p.mes_referencia === mes),
     [proLabore, mes]
@@ -166,17 +224,14 @@ function RelatorioDoc({
           {pagos.length === 0 ? (
             <VazioLinha texto="Nenhuma conta paga neste período." />
           ) : (
-            <Tabela
-              colunas={["Descrição", "Fornecedor", "Pago em", "Comprovante", "Valor"]}
-              linhas={pagos.map((c) => [
-                c.descricao,
-                nomeFornecedor(c.fornecedor_id),
-                formatDate(c.data_pagamento),
-                c.anexo_url ? "Ver comprovante" : "—",
-                brl(Number(c.valor)),
-              ])}
-              links={pagos.map((c) => c.anexo_url)}
-              linkColuna={3}
+            <TabelaLancamentos
+              colunas={["Descrição", "Fornecedor", "Pago em", "Anexos", "Valor"]}
+              linhas={pagos.map((c) => ({
+                id: c.id,
+                celulas: [c.descricao, nomeFornecedor(c.fornecedor_id), formatDate(c.data_pagamento)],
+                valor: brl(Number(c.valor)),
+              }))}
+              anexosPorLancamento={anexosPorLancamento}
             />
           )}
           <Subtotal label="Subtotal pago" valor={totalPago} />
@@ -186,17 +241,14 @@ function RelatorioDoc({
           {recebidos.length === 0 ? (
             <VazioLinha texto="Nenhuma conta recebida neste período." />
           ) : (
-            <Tabela
-              colunas={["Cliente", "Tipo", "Recebido em", "Comprovante", "Valor"]}
-              linhas={recebidos.map((c) => [
-                nomeCliente(c.cliente_id),
-                c.tipo,
-                formatDate(c.data_recebimento),
-                c.anexo_url ? "Ver comprovante" : "—",
-                brl(Number(c.valor)),
-              ])}
-              links={recebidos.map((c) => c.anexo_url)}
-              linkColuna={3}
+            <TabelaLancamentos
+              colunas={["Cliente", "Tipo", "Recebido em", "Anexos", "Valor"]}
+              linhas={recebidos.map((c) => ({
+                id: c.id,
+                celulas: [nomeCliente(c.cliente_id), c.tipo, formatDate(c.data_recebimento)],
+                valor: brl(Number(c.valor)),
+              }))}
+              anexosPorLancamento={anexosPorLancamento}
             />
           )}
           <Subtotal label="Subtotal recebido" valor={totalRecebido} />
@@ -263,6 +315,70 @@ function Secao({ titulo, children }: { titulo: string; children: React.ReactNode
       </p>
       {children}
     </div>
+  );
+}
+
+// Tabela com uma coluna de "Anexos" que pode ter vários arquivos por linha
+// (cada um vira um link clicável que abre/baixa o arquivo em alta qualidade).
+function TabelaLancamentos({
+  colunas,
+  linhas,
+  anexosPorLancamento,
+}: {
+  colunas: string[];
+  linhas: { id: string; celulas: (string | number)[]; valor: string }[];
+  anexosPorLancamento: Record<string, AnexoLink[]>;
+}) {
+  return (
+    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10.5 }}>
+      <thead>
+        <tr>
+          {colunas.map((c, i) => (
+            <th
+              key={i}
+              style={{
+                textAlign: i === colunas.length - 1 ? "right" : "left",
+                borderBottom: `1.5px solid ${NAVY}`,
+                padding: "5px 6px",
+                color: MUTED,
+                fontWeight: 700,
+              }}
+            >
+              {c}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {linhas.map((linha) => {
+          const anexos = anexosPorLancamento[linha.id] ?? [];
+          return (
+            <tr key={linha.id} style={{ borderBottom: `1px solid ${LINE}` }}>
+              {linha.celulas.map((v, j) => (
+                <td key={j} style={{ padding: "5px 6px" }}>
+                  {v}
+                </td>
+              ))}
+              <td style={{ padding: "5px 6px" }}>
+                {anexos.length === 0 ? (
+                  <span style={{ color: MUTED }}>—</span>
+                ) : (
+                  anexos.map((a, i) => (
+                    <span key={i}>
+                      <a href={a.url} target="_blank" rel="noreferrer" style={{ color: BLUE, textDecoration: "underline" }}>
+                        {a.nome}
+                      </a>
+                      {i < anexos.length - 1 && <br />}
+                    </span>
+                  ))
+                )}
+              </td>
+              <td style={{ padding: "5px 6px", textAlign: "right", fontWeight: 700 }}>{linha.valor}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
   );
 }
 

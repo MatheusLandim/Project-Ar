@@ -38,7 +38,8 @@ import {
 } from "@/components/FinanceiroForms";
 import { RelatorioMensalViewer } from "@/components/RelatorioFinanceiroDoc";
 import { PastaEntidade } from "@/components/PastaEntidade";
-import { EntidadeTipo } from "@/lib/types";
+import { AnexosLancamento } from "@/components/AnexosLancamento";
+import { EntidadeTipo, LancamentoTipo } from "@/lib/types";
 
 type Tab =
   | "fluxo"
@@ -47,8 +48,7 @@ type Tab =
   | "cartao"
   | "prolabore"
   | "notas"
-  | "despesas"
-  | "fornecedores";
+  | "despesas";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "fluxo", label: "Fluxo de Caixa" },
@@ -58,7 +58,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "prolabore", label: "Pró-labore" },
   { id: "notas", label: "Notas Fiscais" },
   { id: "despesas", label: "Despesas Fixas" },
-  { id: "fornecedores", label: "Fornecedores" },
 ];
 
 export function FinanceiroView({
@@ -123,6 +122,13 @@ export function FinanceiroView({
   const [showRelatorio, setShowRelatorio] = useState(false);
   const [gerando, setGerando] = useState(false);
   const [showPasta, setShowPasta] = useState<{ tipo: EntidadeTipo; id: string; nome: string } | null>(null);
+  const [showAnexos, setShowAnexos] = useState<{
+    tipo: LancamentoTipo;
+    id: string;
+    titulo: string;
+    entidadeTipo?: EntidadeTipo | null;
+    entidadeId?: string | null;
+  } | null>(null);
 
   // ---------- CRUD: Contas a Pagar ----------
   async function salvarPagar(data: ContaPagarInput) {
@@ -344,6 +350,13 @@ export function FinanceiroView({
             const f = fornecedores.find((x) => x.id === c.fornecedor_id);
             if (f) setShowPasta({ tipo: "fornecedor", id: f.id, nome: f.nome });
           }}
+          onAbrirAnexos={(c) => setShowAnexos({
+            tipo: "pagar",
+            id: c.id,
+            titulo: c.descricao,
+            entidadeTipo: c.fornecedor_id ? "fornecedor" : null,
+            entidadeId: c.fornecedor_id,
+          })}
         />
       )}
 
@@ -360,6 +373,13 @@ export function FinanceiroView({
             const f = fornecedores.find((x) => x.id === c.fornecedor_id);
             if (f) setShowPasta({ tipo: "fornecedor", id: f.id, nome: f.nome });
           }}
+          onAbrirAnexos={(c) => setShowAnexos({
+            tipo: "pagar",
+            id: c.id,
+            titulo: c.descricao,
+            entidadeTipo: c.fornecedor_id ? "fornecedor" : null,
+            entidadeId: c.fornecedor_id,
+          })}
         />
       )}
 
@@ -375,6 +395,13 @@ export function FinanceiroView({
             const cli = clientes.find((x) => x.id === c.cliente_id);
             if (cli) setShowPasta({ tipo: "cliente", id: cli.id, nome: cli.nome });
           }}
+          onAbrirAnexos={(c) => setShowAnexos({
+            tipo: "receber",
+            id: c.id,
+            titulo: nomeCliente(c.cliente_id),
+            entidadeTipo: c.cliente_id ? "cliente" : null,
+            entidadeId: c.cliente_id,
+          })}
         />
       )}
 
@@ -402,6 +429,13 @@ export function FinanceiroView({
               if (f) setShowPasta({ tipo: "fornecedor", id: f.id, nome: f.nome });
             }
           }}
+          onAbrirAnexos={(n) => setShowAnexos({
+            tipo: "nota",
+            id: n.id,
+            titulo: n.cliente_fornecedor || (n.numero ? `Nota ${n.numero}` : "Nota fiscal"),
+            entidadeTipo: n.direcao === "emitida" ? (n.cliente_id ? "cliente" : null) : (n.fornecedor_id ? "fornecedor" : null),
+            entidadeId: n.direcao === "emitida" ? n.cliente_id : n.fornecedor_id,
+          })}
         />
       )}
 
@@ -411,14 +445,6 @@ export function FinanceiroView({
           onNew={() => { setEditDespesa(undefined); setShowDespesa(true); }}
           onEdit={(d) => { setEditDespesa(d); setShowDespesa(true); }}
           onDelete={excluirDespesa}
-        />
-      )}
-
-      {tab === "fornecedores" && (
-        <FornecedoresTab
-          fornecedores={fornecedores}
-          onNew={() => setShowFornecedor(true)}
-          onAbrirPasta={(f) => setShowPasta({ tipo: "fornecedor", id: f.id, nome: f.nome })}
         />
       )}
 
@@ -488,6 +514,16 @@ export function FinanceiroView({
           entidadeId={showPasta.id}
           nomeEntidade={showPasta.nome}
           onClose={() => setShowPasta(null)}
+        />
+      )}
+      {showAnexos && (
+        <AnexosLancamento
+          lancamentoTipo={showAnexos.tipo}
+          lancamentoId={showAnexos.id}
+          entidadeTipo={showAnexos.entidadeTipo}
+          entidadeId={showAnexos.entidadeId}
+          titulo={showAnexos.titulo}
+          onClose={() => setShowAnexos(null)}
         />
       )}
     </div>
@@ -586,6 +622,7 @@ function ContasPagarTab({
   onDelete,
   onBaixar,
   onAbrirPasta,
+  onAbrirAnexos,
   tituloVazio,
 }: {
   contas: ContaPagar[];
@@ -595,6 +632,7 @@ function ContasPagarTab({
   onDelete: (c: ContaPagar) => void;
   onBaixar: (c: ContaPagar) => void;
   onAbrirPasta: (c: ContaPagar) => void;
+  onAbrirAnexos: (c: ContaPagar) => void;
   tituloVazio?: string;
 }) {
   const [filtro, setFiltro] = useState<"todos" | "atrasado" | "pendente" | "pago">("todos");
@@ -626,6 +664,13 @@ function ContasPagarTab({
                   </div>
                   <span className="tnum text-sm font-semibold text-ink">{brl(Number(c.valor))}</span>
                   <StatusBadge status={st} kind="pagamento" />
+                  <button
+                    onClick={() => onAbrirAnexos(c)}
+                    title="Anexos deste lançamento (comprovante, boleto, nota)"
+                    className="t-colors rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5"
+                  >
+                    📎
+                  </button>
                   {c.fornecedor_id && (
                     <button
                       onClick={() => onAbrirPasta(c)}
@@ -665,6 +710,7 @@ function ContasReceberTab({
   onDelete,
   onBaixar,
   onAbrirPasta,
+  onAbrirAnexos,
 }: {
   contas: ContaReceber[];
   nomeCliente: (id: string | null) => string;
@@ -673,6 +719,7 @@ function ContasReceberTab({
   onDelete: (c: ContaReceber) => void;
   onBaixar: (c: ContaReceber) => void;
   onAbrirPasta: (c: ContaReceber) => void;
+  onAbrirAnexos: (c: ContaReceber) => void;
 }) {
   const [filtro, setFiltro] = useState<"todos" | "atrasado" | "pendente" | "pago">("todos");
   const lista = contas.filter((c) => filtro === "todos" || contaReceberStatus(c) === filtro);
@@ -702,6 +749,13 @@ function ContasReceberTab({
                   </div>
                   <span className="tnum text-sm font-semibold text-ink">{brl(Number(c.valor))}</span>
                   <StatusBadge status={st} kind="pagamento" />
+                  <button
+                    onClick={() => onAbrirAnexos(c)}
+                    title="Anexos deste lançamento (comprovante, boleto, nota)"
+                    className="t-colors rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5"
+                  >
+                    📎
+                  </button>
                   {c.cliente_id && (
                     <button
                       onClick={() => onAbrirPasta(c)}
@@ -790,12 +844,14 @@ function NotasFiscaisTab({
   onEdit,
   onDelete,
   onAbrirPasta,
+  onAbrirAnexos,
 }: {
   notas: NotaFiscal[];
   onNew: () => void;
   onEdit: (n: NotaFiscal) => void;
   onDelete: (n: NotaFiscal) => void;
   onAbrirPasta: (n: NotaFiscal) => void;
+  onAbrirAnexos: (n: NotaFiscal) => void;
 }) {
   return (
     <div>
@@ -818,18 +874,19 @@ function NotasFiscaisTab({
                   </p>
                   <p className="text-xs text-ink-soft">
                     {formatDate(n.data_emissao)} · {n.tipo === "servico" ? "Serviço" : "Produto"}
-                    {n.arquivo_url && (
-                      <>
-                        {" · "}
-                        <a href={n.arquivo_url} target="_blank" rel="noreferrer" className="text-brand underline">arquivo</a>
-                      </>
-                    )}
                   </p>
                 </div>
                 <span className="tnum text-sm font-semibold text-ink">{brl(Number(n.valor))}</span>
                 <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${n.status === "cancelada" ? "bg-rose-500/10 text-rose-500" : "bg-emerald-500/10 text-emerald-600"}`}>
                   {n.status === "cancelada" ? "Cancelada" : "Emitida"}
                 </span>
+                <button
+                  onClick={() => onAbrirAnexos(n)}
+                  title="Anexo desta nota (arquivo PDF/XML)"
+                  className="t-colors rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5"
+                >
+                  📎
+                </button>
                 {(n.cliente_id || n.fornecedor_id) && (
                   <button
                     onClick={() => onAbrirPasta(n)}
@@ -841,53 +898,6 @@ function NotasFiscaisTab({
                 )}
                 <button onClick={() => onEdit(n)} className="rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5">✎</button>
                 <button onClick={() => onDelete(n)} className="rounded-lg px-2 py-1.5 text-xs text-rose-500 hover:bg-rose-500/10">🗑</button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ===================== Fornecedores =====================
-
-function FornecedoresTab({
-  fornecedores,
-  onNew,
-  onAbrirPasta,
-}: {
-  fornecedores: Fornecedor[];
-  onNew: () => void;
-  onAbrirPasta: (f: Fornecedor) => void;
-}) {
-  return (
-    <div>
-      <div className="flex justify-end">
-        <button onClick={onNew} className="t-colors rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-glow hover:bg-brand-dark">
-          + Novo fornecedor
-        </button>
-      </div>
-      <div className="mt-4 overflow-hidden rounded-2xl border border-line glass">
-        {fornecedores.length === 0 ? (
-          <p className="p-8 text-center text-sm text-ink-soft">Nenhum fornecedor cadastrado ainda.</p>
-        ) : (
-          <ul className="divide-y divide-line">
-            {fornecedores.map((f) => (
-              <li key={f.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-5">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-ink">{f.nome}</p>
-                  <p className="text-xs text-ink-soft">
-                    {f.categoria || "Sem categoria"}
-                    {f.cnpj_cpf && <> · {f.cnpj_cpf}</>}
-                  </p>
-                </div>
-                <button
-                  onClick={() => onAbrirPasta(f)}
-                  className="t-colors inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink-soft hover:bg-ink/5"
-                >
-                  📁 Pasta
-                </button>
               </li>
             ))}
           </ul>

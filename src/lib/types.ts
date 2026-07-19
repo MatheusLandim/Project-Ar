@@ -330,11 +330,14 @@ export function labelMesReferencia(mes: string): string {
 }
 
 export type EntidadeTipo = "cliente" | "fornecedor";
+export type LancamentoTipo = "pagar" | "receber" | "nota";
 
 export type Documento = {
   id: string;
-  entidade_tipo: EntidadeTipo;
-  entidade_id: string;
+  entidade_tipo: EntidadeTipo | null;
+  entidade_id: string | null;
+  lancamento_tipo: LancamentoTipo | null;
+  lancamento_id: string | null;
   pasta: string | null;
   nome: string;
   path: string;

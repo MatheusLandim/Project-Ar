@@ -18,6 +18,7 @@ import { PagamentosView } from "@/components/views/PagamentosView";
 import { RtView } from "@/components/views/RtView";
 import { DocumentosView } from "@/components/views/DocumentosView";
 import { FinanceiroView } from "@/components/views/FinanceiroView";
+import { FornecedoresView } from "@/components/views/FornecedoresView";
 
 const TITULOS: Record<View, { t: string; s: string }> = {
   overview: { t: "Visão geral", s: "Resumo de contratos, recebimentos e alertas." },
@@ -30,6 +31,10 @@ const TITULOS: Record<View, { t: string; s: string }> = {
   financeiro: {
     t: "Financeiro",
     s: "Contas a pagar, a receber, cartão, pró-labore e relatório mensal.",
+  },
+  fornecedores: {
+    t: "Fornecedores",
+    s: "Cadastro de fornecedores e a pasta de documentos de cada um.",
   },
 };
 
@@ -91,6 +96,7 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
         "rt",
         "documentos",
         "financeiro",
+        "fornecedores",
       ];
       if (saved && validas.includes(saved as View)) setView(saved as View);
     } catch {}
@@ -316,6 +322,8 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
             <RtView projetos={projetos} reload={load} />
           ) : view === "documentos" ? (
             <DocumentosView projetos={projetos} reload={load} />
+          ) : view === "fornecedores" ? (
+            <FornecedoresView />
           ) : (
             <FinanceiroView clientes={clientes} projetos={projetos} />
           )}

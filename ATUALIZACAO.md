@@ -1,79 +1,82 @@
 # Atualização 9 — Módulo Financeiro
 
-Adiciona ao menu lateral o item **Financeiro**, com sete abas: Fluxo de Caixa,
-Contas a Pagar, Contas a Receber, Cartão de Crédito, Pró-labore, Notas Fiscais
-e Despesas Fixas. São **2 passos** para colocar no ar.
+Adiciona ao menu lateral o item **Financeiro** (Fluxo de Caixa, Contas a
+Pagar, Contas a Receber, Cartão de Crédito, Pró-labore, Notas Fiscais,
+Despesas Fixas) e o item **Fornecedores**, separado, no mesmo nível de
+Clientes. São **2 passos** para colocar no ar.
 
 ## Passo 1 — Atualizar o banco (1 minuto)
 
-1. Entre no **Supabase** → seu projeto → **SQL Editor** → **New query**.
-2. Abra o arquivo **`supabase/migration-financeiro.sql`** (vem neste zip),
-   copie TODO o conteúdo, cole e clique em **Run**.
-3. Rode também **`supabase/migration-financeiro-v2.sql`** (mesma forma) —
-   ele adiciona a pasta do cliente e o vínculo da nota fiscal com
-   cliente/fornecedor.
-4. Rode também **`supabase/migration-financeiro-v3.sql`** — cria a tabela
-   `documentos`, usada pelas pastas internas de cliente/fornecedor
-   (comprovante, boleto, nota fiscal, tudo guardado dentro do próprio
-   sistema, no mesmo espaço de arquivos que já é usado nas obras).
-5. Deve aparecer **Success** nos três. Isso cria as tabelas `fornecedores`,
-   `despesas_fixas`, `contas_pagar`, `contas_receber`, `pro_labore`,
-   `notas_fiscais` e `documentos`, já compartilhadas com toda a equipe
-   (mesmo padrão do restante do sistema).
+Rode, **nesta ordem**, no Supabase → seu projeto → **SQL Editor** → **New
+query** (cole o conteúdo de cada arquivo, um de cada vez, e clique em Run):
+
+1. `supabase/migration-financeiro.sql`
+2. `supabase/migration-financeiro-v2.sql`
+3. `supabase/migration-financeiro-v3.sql`
+4. `supabase/migration-financeiro-v4.sql`
+
+Deve aparecer **Success** nos quatro. Isso cria as tabelas `fornecedores`,
+`despesas_fixas`, `contas_pagar`, `contas_receber`, `pro_labore`,
+`notas_fiscais` e `documentos` (pastas internas + anexos por lançamento),
+já compartilhadas com toda a equipe.
 
 > Seguro rodar mesmo com dados existentes: nada é apagado.
 
 ## Passo 2 — Subir o código (GitHub → Vercel)
 
 1. No GitHub, abra o repositório do Project Ar.
-2. Arraste os arquivos deste zip para a raiz do repositório (mesmo processo
-   de sempre) — os arquivos com o mesmo nome são substituídos, os novos são
-   adicionados.
+2. Arraste os arquivos deste zip para a **raiz** do repositório — confira
+   que `package.json` e a pasta `src` ficam soltos na raiz, e não dentro
+   de uma pasta `Project-Ar-main/` extra (esse é o erro mais comum e faz
+   parecer que "nada mudou" depois do deploy).
 3. **Commit changes.** A Vercel republica sozinha em ~2 minutos.
 
-## Como usar
+## Como funciona
 
-- **Cartão de Crédito** é a mesma tabela de Contas a Pagar — lance a fatura
-  do mês como um lançamento normal. Ele aparece tanto na lista geral de
-  **Contas a Pagar** quanto na aba dedicada **Cartão de Crédito** (é só um
-  filtro de conveniência, o dado é o mesmo).
-- **Pasta interna (arquivos dentro do sistema):** cada cliente e cada
-  fornecedor agora tem uma pasta de verdade dentro do app — não é mais só
-  um link externo. Clique em **📁 Pasta** na ficha do cliente (tela
-  **Clientes**) ou do fornecedor (aba **Financeiro → Fornecedores**) pra
-  ver, enviar e organizar notas fiscais, boletos e comprovantes desse
-  cliente/fornecedor, tudo num único lugar. Nos lançamentos de **Contas a
-  Pagar**, **Contas a Receber** e **Notas Fiscais**, o mesmo botão **📁**
-  aparece direto na linha — clicar nele já abre a pasta do
-  fornecedor/cliente daquele lançamento, sem precisar navegar até a ficha.
-  O campo antigo "Link da pasta (nuvem)" continua disponível nos
-  formulários para quem prefere linkar uma pasta externa (Drive etc.), mas
-  a pasta interna é o jeito recomendado a partir de agora.
-- **Contas a Pagar / a Receber:** clique em **+ Novo lançamento**. Ao
-  escolher fornecedor ou cliente, dá para cadastrar um novo na hora com o
-  botão **+ novo**, sem sair da tela.
-- **Despesas Fixas:** cadastre Contabilidade, DAS, DARF, Convênio etc. com o
-  dia de vencimento. Na aba **Fluxo de Caixa**, o botão **"Gerar despesas
-  fixas do mês"** cria os lançamentos do mês em Contas a Pagar (não duplica
-  se já tiverem sido gerados). Edite ou exclua cada lançamento gerado sem
-  afetar os meses seguintes.
+- **Cartão de Crédito** é a mesma tabela de Contas a Pagar, filtrada pelo
+  tipo "Cartão de Crédito" — lance a fatura do mês como um lançamento
+  normal; ele aparece nos dois lugares.
+
+- **Fornecedores** tem página própria no menu (não fica dentro de
+  Financeiro), igual a Clientes: cadastro, edição, exclusão e pasta.
+
+- **Nada de link externo.** Não existe mais campo para colar link de
+  nuvem em lançamento nenhum. Tudo fica dentro do próprio sistema:
+  - Cada **cliente** e cada **fornecedor** tem uma **pasta interna**
+    (botão **📁 Pasta** na ficha dele, ou na aba Financeiro pelo ícone
+    📁 de cada lançamento) com notas fiscais, boletos e comprovantes,
+    organizados por categoria, upload direto pelo navegador.
+  - Cada **lançamento** (Contas a Pagar, Contas a Receber, Nota Fiscal)
+    tem seu próprio botão **📎 Anexos** — o comprovante/boleto/nota
+    anexado ali fica vinculado especificamente àquele lançamento (e
+    também aparece na pasta geral do cliente/fornecedor quando ele está
+    selecionado). Esse vínculo por lançamento é o que alimenta o
+    relatório mensal.
+
+- **Despesas Fixas:** cadastre Contabilidade, DAS, DARF, Convênio etc.
+  com o dia de vencimento. Na aba **Fluxo de Caixa**, o botão **"Gerar
+  despesas fixas do mês"** cria os lançamentos do mês em Contas a Pagar
+  (não duplica se já tiverem sido gerados).
+
 - **Relatório mensal:** na aba **Fluxo de Caixa**, clique em **"Relatório
-  mensal (contabilidade)"**, escolha o mês e depois **Baixar PDF** (usa a
-  função de impressão do navegador, o mesmo recurso já usado para os
-  orçamentos). O relatório traz só o que foi **pago**/**recebido** no mês,
-  o pró-labore, subtotais, identificação da Project Ar Ltda e o rodapé de
+  mensal (contabilidade)"**, escolha o mês e depois **Baixar PDF**. O
+  relatório busca automaticamente os anexos (📎) de cada conta paga/
+  recebida no período e gera, para cada um, um link de download real —
+  quem receber o PDF clica e baixa o arquivo original em alta qualidade
+  (boleto, nota fiscal, comprovante). Esses links ficam válidos por 7
+  dias; se o relatório for reaberto depois disso, é só gerar de novo.
+  O relatório traz só o que foi **pago**/**recebido** no mês, o
+  pró-labore, subtotais, identificação da Project Ar Ltda e o rodapé de
   confidencialidade — sem data/hora de geração.
 
-### Simplificações desta primeira versão (avise se quiser evoluir)
+### O que ainda não está automatizado (avise se quiser evoluir)
 
-- A geração das despesas fixas do mês é feita pelo botão citado acima; não
-  há ainda uma rotina automática 100% sem clique (cron) publicando isso
-  sozinha todo dia 1º — dá para adicionar depois com um Vercel Cron.
-- Os links de comprovante/pasta abrem a URL que você colar (nuvem, Drive
-  etc.) diretamente em nova aba, em vez de uma página própria de
-  visualização — mais simples e já cobre o caso de uso principal.
-- O relatório mensal não gera o `.zip` de anexos automaticamente; o PDF já
-  traz os links de cada comprovante.
+- A geração das despesas fixas do mês depende do botão citado acima;
+  ainda não roda sozinha todo dia 1º (dá pra automatizar com Vercel Cron).
+- O pró-labore continua com um campo de link de comprovante (não uma
+  pasta interna) — pode evoluir para o mesmo padrão se fizer sentido.
+- Despesas Fixas (Contabilidade/DAS/DARF/Convênio) ainda usam um campo de
+  link de pasta, já que não têm um cliente/fornecedor associado.
 
 ---
 
