@@ -7,6 +7,7 @@ import {
   Projeto,
   Fornecedor,
   DespesaFixa,
+  ReceitaRecorrente,
   ContaPagar,
   ContaReceber,
   ProLabore,
@@ -19,6 +20,8 @@ import {
   TIPOS_CONTA_RECEBER,
   mesReferenciaAtual,
   labelMesReferencia,
+  pastaCompetencia,
+  Configuracoes,
   FinanceiroStatus,
   LinhaReceber,
 } from "@/lib/types";
@@ -31,6 +34,8 @@ import {
   ContaReceberInput,
   DespesaFixaForm,
   DespesaFixaInput,
+  ReceitaRecorrenteForm,
+  ReceitaRecorrenteInput,
   ProLaboreForm,
   ProLaboreInput,
   NotaFiscalForm,
@@ -43,35 +48,28 @@ import {
 import { RelatorioMensalViewer } from "@/components/RelatorioFinanceiroDoc";
 import { PastaEntidade } from "@/components/PastaEntidade";
 import { AnexosLancamento } from "@/components/AnexosLancamento";
+import { ContextMenu, MenuContextoState, useFecharMenuAoClicarFora, BotaoMenu } from "@/components/ContextMenu";
 import { EntidadeTipo, LancamentoTipo } from "@/lib/types";
 
-type Tab =
-  | "fluxo"
-  | "pagar"
-  | "receber"
-  | "cartao"
-  | "prolabore"
-  | "notas"
-  | "despesas";
+type Tab = "fluxo" | "pagar" | "receber" | "prolabore";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "fluxo", label: "Fluxo de Caixa" },
   { id: "pagar", label: "Contas a Pagar" },
   { id: "receber", label: "Contas a Receber" },
-  { id: "cartao", label: "Cartão de Crédito" },
   { id: "prolabore", label: "Pró-labore" },
-  { id: "notas", label: "Notas Fiscais" },
-  { id: "despesas", label: "Despesas Fixas" },
 ];
 
 export function FinanceiroView({
   clientes,
   projetos,
   reloadProjetos,
+  configuracoes,
 }: {
   clientes: Cliente[];
   projetos: Projeto[];
   reloadProjetos: () => void;
+  configuracoes?: Configuracoes | null;
 }) {
   const supabase = createClient();
   const [tab, setTab] = useState<Tab>("fluxo");
@@ -79,6 +77,7 @@ export function FinanceiroView({
 
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [despesasFixas, setDespesasFixas] = useState<DespesaFixa[]>([]);
+  const [receitasRecorrentes, setReceitasRecorrentes] = useState<ReceitaRecorrente[]>([]);
   const [contasPagar, setContasPagar] = useState<ContaPagar[]>([]);
   const [contasReceber, setContasReceber] = useState<ContaReceber[]>([]);
   const [proLabore, setProLabore] = useState<ProLabore[]>([]);
@@ -87,9 +86,10 @@ export function FinanceiroView({
   const [erro, setErro] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [forn, desp, pag, rec, pro, notas] = await Promise.all([
+    const [forn, desp, rects, pag, rec, pro, notas] = await Promise.all([
       supabase.from("fornecedores").select("*").order("nome"),
       supabase.from("despesas_fixas").select("*").order("descricao"),
+      supabase.from("receitas_recorrentes").select("*").order("descricao"),
       supabase.from("contas_pagar").select("*").order("vencimento"),
       supabase.from("contas_receber").select("*").order("vencimento"),
       supabase.from("pro_labore").select("*").order("mes_referencia", { ascending: false }),
@@ -102,6 +102,7 @@ export function FinanceiroView({
     }
     setFornecedores((forn.data as Fornecedor[]) ?? []);
     setDespesasFixas((desp.data as DespesaFixa[]) ?? []);
+    setReceitasRecorrentes((rects.data as ReceitaRecorrente[]) ?? []);
     setContasPagar((pag.data as ContaPagar[]) ?? []);
     setContasReceber((rec.data as ContaReceber[]) ?? []);
     setProLabore((pro.data as ProLabore[]) ?? []);
@@ -120,6 +121,8 @@ export function FinanceiroView({
   const [editReceber, setEditReceber] = useState<ContaReceber | undefined>();
   const [showDespesa, setShowDespesa] = useState(false);
   const [editDespesa, setEditDespesa] = useState<DespesaFixa | undefined>();
+  const [showReceitaRecorrente, setShowReceitaRecorrente] = useState(false);
+  const [editReceitaRecorrente, setEditReceitaRecorrente] = useState<ReceitaRecorrente | undefined>();
   const [showProLabore, setShowProLabore] = useState(false);
   const [editProLabore, setEditProLabore] = useState<ProLabore | undefined>();
   const [showNota, setShowNota] = useState(false);
@@ -135,15 +138,59 @@ export function FinanceiroView({
     titulo: string;
     entidadeTipo?: EntidadeTipo | null;
     entidadeId?: string | null;
+    pastaFixa?: string | null;
   } | null>(null);
 
+  // Se o lançamento é de uma despesa fixa, o anexo vai automático pra
+  // pasta dessa despesa, organizada por ano/mês de competência. Senão,
+  // Se o lançamento tem despesa fixa, resolve o fornecedor (pasta) ligado
+  // a ela. Senão, usa o fornecedor selecionado direto no lançamento.
+  function fornecedorDoLancamento(c: ContaPagar): string | null {
+    if (c.despesa_fixa_id) {
+      return despesasFixas.find((d) => d.id === c.despesa_fixa_id)?.fornecedor_id ?? null;
+    }
+    return c.fornecedor_id;
+  }
+
+  function infoAnexoPagar(c: ContaPagar) {
+    const fId = fornecedorDoLancamento(c);
+    return {
+      entidadeTipo: fId ? ("fornecedor" as EntidadeTipo) : null,
+      entidadeId: fId,
+      pastaFixa: fId && c.mes_competencia ? pastaCompetencia(c.mes_competencia) : null,
+    };
+  }
+
   // ---------- CRUD: Contas a Pagar ----------
-  async function salvarPagar(data: ContaPagarInput) {
-    if (editPagar) await supabase.from("contas_pagar").update(data).eq("id", editPagar.id);
-    else await supabase.from("contas_pagar").insert(data);
+  async function salvarPagar(data: ContaPagarInput): Promise<string | null> {
+    let id: string | null = editPagar?.id ?? null;
+    if (editPagar) {
+      await supabase.from("contas_pagar").update(data).eq("id", editPagar.id);
+    } else {
+      const { data: inserida } = await supabase.from("contas_pagar").insert(data).select("id").single();
+      id = inserida?.id ?? null;
+    }
+
+    // Garante que a pasta Ano/Mês já existe na pasta do fornecedor
+    // vinculado, mesmo antes de anexar algo.
+    const fId = data.despesa_fixa_id
+      ? despesasFixas.find((d) => d.id === data.despesa_fixa_id)?.fornecedor_id ?? null
+      : data.fornecedor_id;
+    if (fId && data.mes_competencia) {
+      const { error } = await supabase.from("pastas_documentos").insert({
+        entidade_tipo: "fornecedor",
+        entidade_id: fId,
+        caminho: pastaCompetencia(data.mes_competencia),
+      });
+      if (error && !error.message.includes("duplicate")) {
+        // silencioso — a pasta aparece de qualquer forma quando um arquivo for anexado
+      }
+    }
+
     setShowPagar(false);
     setEditPagar(undefined);
     await load();
+    return id;
   }
   async function excluirPagar(c: ContaPagar) {
     if (!confirm("Excluir este lançamento de Contas a Pagar?")) return;
@@ -159,12 +206,32 @@ export function FinanceiroView({
   }
 
   // ---------- CRUD: Contas a Receber ----------
-  async function salvarReceber(data: ContaReceberInput) {
-    if (editReceber) await supabase.from("contas_receber").update(data).eq("id", editReceber.id);
-    else await supabase.from("contas_receber").insert(data);
+  async function salvarReceber(data: ContaReceberInput): Promise<string | null> {
+    let id: string | null = editReceber?.id ?? null;
+    if (editReceber) {
+      await supabase.from("contas_receber").update(data).eq("id", editReceber.id);
+    } else {
+      const { data: inserida } = await supabase.from("contas_receber").insert(data).select("id").single();
+      id = inserida?.id ?? null;
+    }
+
+    // Garante que a pasta Ano/Mês já existe na pasta do contratante, mesmo
+    // antes de anexar algo.
+    if (data.fornecedor_id && data.mes_competencia) {
+      const { error } = await supabase.from("pastas_documentos").insert({
+        entidade_tipo: "fornecedor",
+        entidade_id: data.fornecedor_id,
+        caminho: pastaCompetencia(data.mes_competencia),
+      });
+      if (error && !error.message.includes("duplicate")) {
+        // silencioso — a pasta aparece de qualquer forma quando um arquivo for anexado
+      }
+    }
+
     setShowReceber(false);
     setEditReceber(undefined);
     await load();
+    return id;
   }
   // Ações unificadas: cobrem tanto os lançamentos nativos de Contas a
   // Receber quanto os "Recebimentos" antigos (tabela pagamentos, ligados a
@@ -203,13 +270,80 @@ export function FinanceiroView({
     await load();
   }
 
+  // ---------- CRUD: Recebimentos Recorrentes ----------
+  async function salvarReceitaRecorrente(data: ReceitaRecorrenteInput) {
+    if (editReceitaRecorrente) await supabase.from("receitas_recorrentes").update(data).eq("id", editReceitaRecorrente.id);
+    else await supabase.from("receitas_recorrentes").insert(data);
+    setShowReceitaRecorrente(false);
+    setEditReceitaRecorrente(undefined);
+    await load();
+  }
+  async function excluirReceitaRecorrente(r: ReceitaRecorrente) {
+    if (!confirm("Excluir este recebimento recorrente? Lançamentos já gerados não serão apagados.")) return;
+    await supabase.from("receitas_recorrentes").delete().eq("id", r.id);
+    await load();
+  }
+  async function gerarRecebimentosDoMes() {
+    setGerando(true);
+    const mes = mesSelecionado;
+    const ano = Number(mes.split("-")[0]);
+    const mesNum = Number(mes.split("-")[1]);
+    const ativas = receitasRecorrentes.filter((r) => r.ativo);
+    let criados = 0;
+    for (const r of ativas) {
+      const jaExiste = contasReceber.some(
+        (c) =>
+          c.receita_recorrente_id === r.id &&
+          c.vencimento &&
+          c.vencimento.startsWith(mes)
+      );
+      if (jaExiste) continue;
+      const dia = String(Math.min(28, r.dia_vencimento)).padStart(2, "0");
+      const vencimento = `${ano}-${String(mesNum).padStart(2, "0")}-${dia}`;
+      await supabase.from("contas_receber").insert({
+        tipo: "boleto",
+        valor: r.valor ?? 0,
+        vencimento,
+        fornecedor_id: r.fornecedor_id,
+        receita_recorrente_id: r.id,
+        mes_competencia: mes,
+      });
+      criados++;
+    }
+    await load();
+    setGerando(false);
+    alert(
+      criados > 0
+        ? `${criados} lançamento(s) gerado(s) para ${labelMesReferencia(mes)}.`
+        : `Nenhum lançamento novo — os recebimentos recorrentes de ${labelMesReferencia(mes)} já foram gerados.`
+    );
+  }
+
   // ---------- CRUD: Pró-labore ----------
-  async function salvarProLabore(data: ProLaboreInput) {
-    if (editProLabore) await supabase.from("pro_labore").update(data).eq("id", editProLabore.id);
-    else await supabase.from("pro_labore").insert(data);
+  async function salvarProLabore(data: ProLaboreInput, comprovante: File | null) {
+    let comprovanteUrl = data.comprovante_url;
+    if (comprovante) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const limpo = comprovante.name.replace(/[^\w.\-]+/g, "_");
+        const path = `${user.id}/prolabore/${Date.now()}_${limpo}`;
+        const up = await supabase.storage.from("anexos").upload(path, comprovante);
+        if (!up.error) comprovanteUrl = path;
+      }
+    }
+    const payload = { ...data, comprovante_url: comprovanteUrl };
+    if (editProLabore) await supabase.from("pro_labore").update(payload).eq("id", editProLabore.id);
+    else await supabase.from("pro_labore").insert(payload);
     setShowProLabore(false);
     setEditProLabore(undefined);
     await load();
+  }
+  async function abrirComprovanteProLabore(p: ProLabore) {
+    if (!p.comprovante_url) return;
+    const { data, error } = await supabase.storage.from("anexos").createSignedUrl(p.comprovante_url, 120);
+    if (!error && data) window.open(data.signedUrl, "_blank");
   }
   async function excluirProLabore(p: ProLabore) {
     if (!confirm("Excluir este pró-labore?")) return;
@@ -268,11 +402,13 @@ export function FinanceiroView({
         tipo: d.categoria === "Cartão de Crédito" ? "cartao_credito" : "boleto",
         descricao: d.descricao,
         categoria: d.categoria,
+        fornecedor_id: d.fornecedor_id,
         valor: d.valor ?? 0,
         vencimento,
         vinculo_tipo: "despesa_fixa",
         pasta_url: d.pasta_url,
         despesa_fixa_id: d.id,
+        mes_competencia: mes,
       });
       criados++;
     }
@@ -297,6 +433,9 @@ export function FinanceiroView({
       dataRecebimento: c.data_recebimento,
       status: contaReceberStatus(c),
       clienteId: c.cliente_id,
+      obraId: c.obra_id,
+      fornecedorId: c.fornecedor_id,
+      mesCompetencia: c.mes_competencia,
     }));
     const deObras: LinhaReceber[] = [];
     for (const p of projetos) {
@@ -311,6 +450,9 @@ export function FinanceiroView({
           dataRecebimento: pg.data_pagamento,
           status: pagamentoStatus(pg),
           clienteId: p.cliente_id,
+          obraId: p.id,
+          fornecedorId: null,
+          mesCompetencia: null,
         });
       }
     }
@@ -361,18 +503,26 @@ export function FinanceiroView({
 
   return (
     <div className="animate-fade-up">
-      <div className="mb-5 flex flex-wrap gap-1.5">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`t-colors rounded-full px-3.5 py-1.5 text-sm font-medium ${
-              tab === t.id ? "bg-ink text-canvas" : "glass text-ink-soft hover:text-ink"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-1.5">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`t-colors rounded-full px-3.5 py-1.5 text-sm font-medium ${
+                tab === t.id ? "bg-ink text-canvas" : "glass text-ink-soft hover:text-ink"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => setShowRelatorio(true)}
+          className="t-colors rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white shadow-glow hover:bg-brand-dark"
+        >
+          Relatório (contabilidade)
+        </button>
       </div>
 
       {tab === "fluxo" && (
@@ -380,9 +530,6 @@ export function FinanceiroView({
           totais={totais}
           mesSelecionado={mesSelecionado}
           onMudarMes={setMesSelecionado}
-          onGerarLancamentos={gerarLancamentosDoMes}
-          gerando={gerando}
-          onVerRelatorio={() => setShowRelatorio(true)}
         />
       )}
 
@@ -395,39 +542,28 @@ export function FinanceiroView({
           onDelete={excluirPagar}
           onBaixar={baixarPagar}
           onAbrirPasta={(c) => {
-            const f = fornecedores.find((x) => x.id === c.fornecedor_id);
+            const fId = fornecedorDoLancamento(c);
+            const f = fornecedores.find((x) => x.id === fId);
             if (f) setShowPasta({ tipo: "fornecedor", id: f.id, nome: f.nome });
           }}
           onAbrirAnexos={(c) => setShowAnexos({
             tipo: "pagar",
             id: c.id,
             titulo: c.descricao,
-            entidadeTipo: c.fornecedor_id ? "fornecedor" : null,
-            entidadeId: c.fornecedor_id,
+            ...infoAnexoPagar(c),
           })}
-        />
-      )}
-
-      {tab === "cartao" && (
-        <ContasPagarTab
-          contas={contasPagar.filter((c) => c.tipo === "cartao_credito")}
-          nomeFornecedor={nomeFornecedor}
-          onNew={() => { setEditPagar(undefined); setShowPagar(true); }}
-          onEdit={(c) => { setEditPagar(c); setShowPagar(true); }}
-          onDelete={excluirPagar}
-          onBaixar={baixarPagar}
-          tituloVazio="Nenhuma despesa de cartão de crédito lançada."
-          onAbrirPasta={(c) => {
-            const f = fornecedores.find((x) => x.id === c.fornecedor_id);
+          despesasFixas={despesasFixas}
+          mesSelecionado={mesSelecionado}
+          onGerarDespesasFixas={gerarLancamentosDoMes}
+          gerandoDespesasFixas={gerando}
+          onNovaDespesaFixa={() => { setEditDespesa(undefined); setShowDespesa(true); }}
+          onEditarDespesaFixa={(d) => { setEditDespesa(d); setShowDespesa(true); }}
+          onExcluirDespesaFixa={excluirDespesa}
+          onAbrirPastaDespesaFixa={(d) => {
+            const f = fornecedores.find((x) => x.id === d.fornecedor_id);
             if (f) setShowPasta({ tipo: "fornecedor", id: f.id, nome: f.nome });
+            else alert("Essa despesa fixa ainda não tem uma pasta vinculada. Edite e escolha uma em Fornecedores.");
           }}
-          onAbrirAnexos={(c) => setShowAnexos({
-            tipo: "pagar",
-            id: c.id,
-            titulo: c.descricao,
-            entidadeTipo: c.fornecedor_id ? "fornecedor" : null,
-            entidadeId: c.fornecedor_id,
-          })}
         />
       )}
 
@@ -442,6 +578,11 @@ export function FinanceiroView({
           onDelete={excluirLinhaReceber}
           onBaixar={baixarLinhaReceber}
           onAbrirPasta={(l) => {
+            if (l.fornecedorId) {
+              const f = fornecedores.find((x) => x.id === l.fornecedorId);
+              if (f) setShowPasta({ tipo: "fornecedor", id: f.id, nome: f.nome });
+              return;
+            }
             const cli = clientes.find((x) => x.id === l.clienteId);
             if (cli) setShowPasta({ tipo: "cliente", id: cli.id, nome: cli.nome });
           }}
@@ -449,9 +590,22 @@ export function FinanceiroView({
             tipo: "receber",
             id: l.id,
             titulo: l.titulo,
-            entidadeTipo: l.clienteId ? "cliente" : null,
-            entidadeId: l.clienteId,
+            entidadeTipo: l.fornecedorId ? "fornecedor" : l.clienteId ? "cliente" : null,
+            entidadeId: l.fornecedorId ?? l.clienteId,
+            pastaFixa: l.fornecedorId && l.mesCompetencia ? pastaCompetencia(l.mesCompetencia) : null,
           })}
+          receitasRecorrentes={receitasRecorrentes}
+          mesSelecionado={mesSelecionado}
+          onGerarRecebimentos={gerarRecebimentosDoMes}
+          gerandoRecebimentos={gerando}
+          onNovaReceitaRecorrente={() => { setEditReceitaRecorrente(undefined); setShowReceitaRecorrente(true); }}
+          onEditarReceitaRecorrente={(r) => { setEditReceitaRecorrente(r); setShowReceitaRecorrente(true); }}
+          onExcluirReceitaRecorrente={excluirReceitaRecorrente}
+          onAbrirPastaReceitaRecorrente={(r) => {
+            const f = fornecedores.find((x) => x.id === r.fornecedor_id);
+            if (f) setShowPasta({ tipo: "fornecedor", id: f.id, nome: f.nome });
+            else alert("Esse recebimento recorrente ainda não tem uma pasta vinculada. Edite e escolha uma em Fornecedores.");
+          }}
         />
       )}
 
@@ -461,40 +615,7 @@ export function FinanceiroView({
           onNew={() => { setEditProLabore(undefined); setShowProLabore(true); }}
           onEdit={(p) => { setEditProLabore(p); setShowProLabore(true); }}
           onDelete={excluirProLabore}
-        />
-      )}
-
-      {tab === "notas" && (
-        <NotasFiscaisTab
-          notas={notasFiscais}
-          onNew={() => { setEditNota(undefined); setShowNota(true); }}
-          onEdit={(n) => { setEditNota(n); setShowNota(true); }}
-          onDelete={excluirNota}
-          onAbrirPasta={(n) => {
-            if (n.direcao === "emitida" && n.cliente_id) {
-              const cli = clientes.find((x) => x.id === n.cliente_id);
-              if (cli) setShowPasta({ tipo: "cliente", id: cli.id, nome: cli.nome });
-            } else if (n.direcao === "recebida" && n.fornecedor_id) {
-              const f = fornecedores.find((x) => x.id === n.fornecedor_id);
-              if (f) setShowPasta({ tipo: "fornecedor", id: f.id, nome: f.nome });
-            }
-          }}
-          onAbrirAnexos={(n) => setShowAnexos({
-            tipo: "nota",
-            id: n.id,
-            titulo: n.cliente_fornecedor || (n.numero ? `Nota ${n.numero}` : "Nota fiscal"),
-            entidadeTipo: n.direcao === "emitida" ? (n.cliente_id ? "cliente" : null) : (n.fornecedor_id ? "fornecedor" : null),
-            entidadeId: n.direcao === "emitida" ? n.cliente_id : n.fornecedor_id,
-          })}
-        />
-      )}
-
-      {tab === "despesas" && (
-        <DespesasFixasTab
-          despesas={despesasFixas}
-          onNew={() => { setEditDespesa(undefined); setShowDespesa(true); }}
-          onEdit={(d) => { setEditDespesa(d); setShowDespesa(true); }}
-          onDelete={excluirDespesa}
+          onAbrirComprovante={abrirComprovanteProLabore}
         />
       )}
 
@@ -503,6 +624,7 @@ export function FinanceiroView({
           initial={editPagar}
           fornecedores={fornecedores}
           projetos={projetos}
+          despesasFixas={despesasFixas}
           onCancel={() => { setShowPagar(false); setEditPagar(undefined); }}
           onSave={salvarPagar}
           onNovoFornecedor={() => setShowFornecedor(true)}
@@ -513,6 +635,8 @@ export function FinanceiroView({
           initial={editReceber}
           clientes={clientes}
           projetos={projetos}
+          fornecedores={fornecedores}
+          receitasRecorrentes={receitasRecorrentes}
           onCancel={() => { setShowReceber(false); setEditReceber(undefined); }}
           onSave={salvarReceber}
           onNovoCliente={() => setShowCliente(true)}
@@ -521,8 +645,17 @@ export function FinanceiroView({
       {showDespesa && (
         <DespesaFixaForm
           initial={editDespesa}
+          fornecedores={fornecedores.filter((f) => f.tipo_pasta === "fixa")}
           onCancel={() => { setShowDespesa(false); setEditDespesa(undefined); }}
           onSave={salvarDespesa}
+        />
+      )}
+      {showReceitaRecorrente && (
+        <ReceitaRecorrenteForm
+          initial={editReceitaRecorrente}
+          fornecedores={fornecedores.filter((f) => f.tipo_pasta === "receita_recorrente")}
+          onCancel={() => { setShowReceitaRecorrente(false); setEditReceitaRecorrente(undefined); }}
+          onSave={salvarReceitaRecorrente}
         />
       )}
       {showProLabore && (
@@ -553,6 +686,8 @@ export function FinanceiroView({
           contasPagar={contasPagar}
           recebiveis={linhasReceber}
           proLabore={proLabore}
+          projetos={projetos}
+          configuracoes={configuracoes}
           nomeFornecedor={nomeFornecedor}
           onClose={() => setShowRelatorio(false)}
         />
@@ -571,6 +706,7 @@ export function FinanceiroView({
           lancamentoId={showAnexos.id}
           entidadeTipo={showAnexos.entidadeTipo}
           entidadeId={showAnexos.entidadeId}
+          pastaFixa={showAnexos.pastaFixa}
           titulo={showAnexos.titulo}
           onClose={() => setShowAnexos(null)}
         />
@@ -585,9 +721,6 @@ function FluxoCaixaTab({
   totais,
   mesSelecionado,
   onMudarMes,
-  onGerarLancamentos,
-  gerando,
-  onVerRelatorio,
 }: {
   totais: {
     aPagar: number; pago: number; atrasadoPagar: number;
@@ -596,9 +729,6 @@ function FluxoCaixaTab({
   };
   mesSelecionado: string;
   onMudarMes: (mes: string) => void;
-  onGerarLancamentos: () => void;
-  gerando: boolean;
-  onVerRelatorio: () => void;
 }) {
   return (
     <div className="space-y-5">
@@ -612,7 +742,7 @@ function FluxoCaixaTab({
             value={mesSelecionado}
             onChange={(e) => e.target.value && onMudarMes(e.target.value)}
             className="t-colors rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-ink"
-            title="Escolha o mês do resumo, do relatório e da geração de despesas fixas"
+            title="Escolha o mês do resumo"
           />
           {mesSelecionado !== mesReferenciaAtual() && (
             <button
@@ -623,37 +753,50 @@ function FluxoCaixaTab({
             </button>
           )}
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={onGerarLancamentos}
-            disabled={gerando}
-            className="t-colors rounded-lg border border-line px-3.5 py-2 text-sm font-medium text-ink-soft hover:bg-ink/5 disabled:opacity-60"
-            title={`Gera as despesas fixas para ${labelMesReferencia(mesSelecionado)}`}
-          >
-            {gerando ? "Gerando…" : `Gerar despesas fixas de ${labelMesReferencia(mesSelecionado)}`}
-          </button>
-          <button
-            onClick={onVerRelatorio}
-            className="t-colors rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white shadow-glow hover:bg-brand-dark"
-          >
-            Relatório mensal (contabilidade)
-          </button>
-        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <MiniStat label="A pagar" value={brl(totais.aPagar)} tone="amber" />
-        <MiniStat label="Pago no período" value={brl(totais.pago)} tone="emerald" />
-        <MiniStat label="A receber" value={brl(totais.aReceber)} tone="amber" />
-        <MiniStat label="Recebido no período" value={brl(totais.recebido)} tone="emerald" />
-        <MiniStat label="Atrasados (pagar)" value={brl(totais.atrasadoPagar)} tone="rose" />
-        <MiniStat label="Atrasados (receber)" value={brl(totais.atrasadoReceber)} tone="rose" />
-        <MiniStat label="Pró-labore do período" value={brl(totais.proLaboreMes)} tone="amber" />
-        <MiniStat
-          label="Saldo (recebido − pago)"
-          value={brl(totais.saldo)}
-          tone={totais.saldo >= 0 ? "emerald" : "rose"}
-        />
+      <div className="space-y-6">
+        {/* Saldo — destaque principal */}
+        <div className="rounded-2xl border border-line glass p-5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+            Saldo do período (recebido − pago)
+          </p>
+          <p
+            className={`tnum mt-1.5 font-display text-xl font-extrabold ${
+              totais.saldo >= 0 ? "text-emerald-500" : "text-rose-500"
+            }`}
+          >
+            {brl(totais.saldo)}
+          </p>
+        </div>
+
+        {/* A pagar */}
+        <div>
+          <h3 className="mb-2.5 font-display text-base font-bold text-ink">A pagar</h3>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <MiniStat label="A pagar" value={brl(totais.aPagar)} tone="amber" />
+            <MiniStat label="Pago no período" value={brl(totais.pago)} tone="emerald" />
+            <MiniStat label="Atrasados" value={brl(totais.atrasadoPagar)} tone="rose" />
+          </div>
+        </div>
+
+        {/* A receber */}
+        <div>
+          <h3 className="mb-2.5 font-display text-base font-bold text-ink">A receber</h3>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <MiniStat label="A receber" value={brl(totais.aReceber)} tone="amber" />
+            <MiniStat label="Recebido no período" value={brl(totais.recebido)} tone="emerald" />
+            <MiniStat label="Atrasados" value={brl(totais.atrasadoReceber)} tone="rose" />
+          </div>
+        </div>
+
+        {/* Pró-labore */}
+        <div>
+          <h3 className="mb-2.5 font-display text-base font-bold text-ink">Pró-labore</h3>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <MiniStat label="Pró-labore do período" value={brl(totais.proLaboreMes)} tone="amber" />
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -693,6 +836,14 @@ function ContasPagarTab({
   onAbrirPasta,
   onAbrirAnexos,
   tituloVazio,
+  despesasFixas,
+  mesSelecionado,
+  onGerarDespesasFixas,
+  gerandoDespesasFixas,
+  onNovaDespesaFixa,
+  onEditarDespesaFixa,
+  onExcluirDespesaFixa,
+  onAbrirPastaDespesaFixa,
 }: {
   contas: ContaPagar[];
   nomeFornecedor: (id: string | null) => string;
@@ -703,13 +854,50 @@ function ContasPagarTab({
   onAbrirPasta: (c: ContaPagar) => void;
   onAbrirAnexos: (c: ContaPagar) => void;
   tituloVazio?: string;
+  despesasFixas: DespesaFixa[];
+  mesSelecionado: string;
+  onGerarDespesasFixas: () => void;
+  gerandoDespesasFixas: boolean;
+  onNovaDespesaFixa: () => void;
+  onEditarDespesaFixa: (d: DespesaFixa) => void;
+  onExcluirDespesaFixa: (d: DespesaFixa) => void;
+  onAbrirPastaDespesaFixa: (d: DespesaFixa) => void;
 }) {
   const [filtro, setFiltro] = useState<"todos" | "atrasado" | "pendente" | "pago">("todos");
   const lista = contas.filter((c) => filtro === "todos" || contaPagarStatus(c) === filtro);
+  const [menu, setMenu] = useState<MenuContextoState | null>(null);
+  useFecharMenuAoClicarFora(!!menu, () => setMenu(null));
+  const [mostrarFixas, setMostrarFixas] = useState(false);
 
   return (
     <div>
-      <TopBar onNew={onNew} newLabel="+ Novo lançamento" filtro={filtro} setFiltro={setFiltro} />
+      <TopBar
+        onNew={onNew}
+        newLabel="+ Novo lançamento"
+        filtro={filtro}
+        setFiltro={setFiltro}
+        extraButton={{
+          label: mostrarFixas ? "Ocultar despesas fixas" : "Despesas fixas",
+          onClick: () => setMostrarFixas((v) => !v),
+        }}
+      />
+
+      {mostrarFixas && (
+        <div className="mt-4 rounded-2xl border border-line glass p-4">
+          <h3 className="mb-3 font-display text-sm font-bold text-ink">Despesas fixas</h3>
+          <DespesasFixasTab
+            despesas={despesasFixas}
+            mesSelecionado={mesSelecionado}
+            onGerarLancamentos={onGerarDespesasFixas}
+            gerando={gerandoDespesasFixas}
+            onNew={onNovaDespesaFixa}
+            onEdit={onEditarDespesaFixa}
+            onDelete={onExcluirDespesaFixa}
+            onAbrirPasta={onAbrirPastaDespesaFixa}
+          />
+        </div>
+      )}
+
       <div className="mt-4 overflow-hidden rounded-2xl border border-line glass">
         {lista.length === 0 ? (
           <p className="p-8 text-center text-sm text-ink-soft">
@@ -720,7 +908,25 @@ function ContasPagarTab({
             {lista.map((c) => {
               const st = contaPagarStatus(c);
               return (
-                <li key={c.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-5">
+                <li
+                  key={c.id}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setMenu({
+                      x: e.clientX,
+                      y: e.clientY,
+                      opcoes: [
+                        { label: "Anexos", onClick: () => onAbrirAnexos(c) },
+                        ...(c.fornecedor_id || c.despesa_fixa_id
+                          ? [{ label: "Abrir pasta", onClick: () => onAbrirPasta(c) }]
+                          : []),
+                        { label: "Editar", onClick: () => onEdit(c) },
+                        { label: "Excluir", tone: "danger", onClick: () => onDelete(c) },
+                      ],
+                    });
+                  }}
+                  className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-5"
+                >
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-ink">
                       {c.descricao}
@@ -729,26 +935,11 @@ function ContasPagarTab({
                     <p className="text-xs text-ink-soft">
                       {nomeFornecedor(c.fornecedor_id)} · vence {formatDate(c.vencimento)}
                       {c.data_pagamento && <> · pago {formatDate(c.data_pagamento)}</>}
+                      {c.mes_competencia && <> · competência {labelMesReferencia(c.mes_competencia)}</>}
                     </p>
                   </div>
                   <span className="tnum text-sm font-semibold text-ink">{brl(Number(c.valor))}</span>
                   <StatusBadge status={st} kind="pagamento" />
-                  <button
-                    onClick={() => onAbrirAnexos(c)}
-                    title="Anexos deste lançamento (comprovante, boleto, nota)"
-                    className="t-colors rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5"
-                  >
-                    📎
-                  </button>
-                  {c.fornecedor_id && (
-                    <button
-                      onClick={() => onAbrirPasta(c)}
-                      title="Abrir pasta do fornecedor"
-                      className="t-colors rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5"
-                    >
-                      📁
-                    </button>
-                  )}
                   <button
                     onClick={() => onBaixar(c)}
                     className={`t-colors rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
@@ -757,14 +948,28 @@ function ContasPagarTab({
                   >
                     {c.data_pagamento ? "Reabrir" : "Pagar"}
                   </button>
-                  <button onClick={() => onEdit(c)} className="rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5">✎</button>
-                  <button onClick={() => onDelete(c)} className="rounded-lg px-2 py-1.5 text-xs text-rose-500 hover:bg-rose-500/10">🗑</button>
+                  <BotaoMenu
+                    onAbrir={(pos) =>
+                      setMenu({
+                        ...pos,
+                        opcoes: [
+                          { label: "Anexos", onClick: () => onAbrirAnexos(c) },
+                          ...(c.fornecedor_id || c.despesa_fixa_id
+                            ? [{ label: "Abrir pasta", onClick: () => onAbrirPasta(c) }]
+                            : []),
+                          { label: "Editar", onClick: () => onEdit(c) },
+                          { label: "Excluir", tone: "danger" as const, onClick: () => onDelete(c) },
+                        ],
+                      })
+                    }
+                  />
                 </li>
               );
             })}
           </ul>
         )}
       </div>
+      {menu && <ContextMenu menu={menu} onFechar={() => setMenu(null)} />}
     </div>
   );
 }
@@ -779,6 +984,14 @@ function ContasReceberTab({
   onBaixar,
   onAbrirPasta,
   onAbrirAnexos,
+  receitasRecorrentes,
+  mesSelecionado,
+  onGerarRecebimentos,
+  gerandoRecebimentos,
+  onNovaReceitaRecorrente,
+  onEditarReceitaRecorrente,
+  onExcluirReceitaRecorrente,
+  onAbrirPastaReceitaRecorrente,
 }: {
   linhas: LinhaReceber[];
   onNew: () => void;
@@ -787,13 +1000,48 @@ function ContasReceberTab({
   onBaixar: (l: LinhaReceber) => void;
   onAbrirPasta: (l: LinhaReceber) => void;
   onAbrirAnexos: (l: LinhaReceber) => void;
+  receitasRecorrentes: ReceitaRecorrente[];
+  mesSelecionado: string;
+  onGerarRecebimentos: () => void;
+  gerandoRecebimentos: boolean;
+  onNovaReceitaRecorrente: () => void;
+  onEditarReceitaRecorrente: (r: ReceitaRecorrente) => void;
+  onExcluirReceitaRecorrente: (r: ReceitaRecorrente) => void;
+  onAbrirPastaReceitaRecorrente: (r: ReceitaRecorrente) => void;
 }) {
   const [filtro, setFiltro] = useState<"todos" | "atrasado" | "pendente" | "pago">("todos");
   const lista = todasLinhas.filter((l) => filtro === "todos" || l.status === filtro);
+  const [mostrarRecorrentes, setMostrarRecorrentes] = useState(false);
 
   return (
     <div>
-      <TopBar onNew={onNew} newLabel="+ Novo lançamento" filtro={filtro} setFiltro={setFiltro} />
+      <TopBar
+        onNew={onNew}
+        newLabel="+ Novo lançamento"
+        filtro={filtro}
+        setFiltro={setFiltro}
+        extraButton={{
+          label: mostrarRecorrentes ? "Ocultar recebimentos recorrentes" : "Recebimentos recorrentes",
+          onClick: () => setMostrarRecorrentes((v) => !v),
+        }}
+      />
+
+      {mostrarRecorrentes && (
+        <div className="mt-4 rounded-2xl border border-line glass p-4">
+          <h3 className="mb-3 font-display text-sm font-bold text-ink">Recebimentos recorrentes</h3>
+          <ReceitasRecorrentesTab
+            receitas={receitasRecorrentes}
+            mesSelecionado={mesSelecionado}
+            onGerarLancamentos={onGerarRecebimentos}
+            gerando={gerandoRecebimentos}
+            onNew={onNovaReceitaRecorrente}
+            onEdit={onEditarReceitaRecorrente}
+            onDelete={onExcluirReceitaRecorrente}
+            onAbrirPasta={onAbrirPastaReceitaRecorrente}
+          />
+        </div>
+      )}
+
       <div className="mt-4 overflow-hidden rounded-2xl border border-line glass">
         {lista.length === 0 ? (
           <p className="p-8 text-center text-sm text-ink-soft">Nenhum lançamento neste filtro.</p>
@@ -862,11 +1110,13 @@ function ProLaboreTab({
   onNew,
   onEdit,
   onDelete,
+  onAbrirComprovante,
 }: {
   registros: ProLabore[];
   onNew: () => void;
   onEdit: (p: ProLabore) => void;
   onDelete: (p: ProLabore) => void;
+  onAbrirComprovante: (p: ProLabore) => void;
 }) {
   return (
     <div>
@@ -886,10 +1136,11 @@ function ProLaboreTab({
                   <p className="truncate text-sm font-semibold text-ink">{labelMesReferencia(p.mes_referencia)}</p>
                   <p className="text-xs text-ink-soft">
                     {p.data_pagamento ? `pago ${formatDate(p.data_pagamento)}` : "não pago"}
+                    {p.forma_transferencia && <> · {p.forma_transferencia}</>}
                     {p.comprovante_url && (
                       <>
                         {" · "}
-                        <a href={p.comprovante_url} target="_blank" rel="noreferrer" className="text-brand underline">comprovante</a>
+                        <button onClick={() => onAbrirComprovante(p)} className="text-brand underline">comprovante</button>
                       </>
                     )}
                   </p>
@@ -981,18 +1232,37 @@ function NotasFiscaisTab({
 
 function DespesasFixasTab({
   despesas,
+  mesSelecionado,
+  onGerarLancamentos,
+  gerando,
   onNew,
   onEdit,
   onDelete,
+  onAbrirPasta,
 }: {
   despesas: DespesaFixa[];
+  mesSelecionado: string;
+  onGerarLancamentos: () => void;
+  gerando: boolean;
   onNew: () => void;
   onEdit: (d: DespesaFixa) => void;
   onDelete: (d: DespesaFixa) => void;
+  onAbrirPasta: (d: DespesaFixa) => void;
 }) {
+  const [menu, setMenu] = useState<MenuContextoState | null>(null);
+  useFecharMenuAoClicarFora(!!menu, () => setMenu(null));
+
   return (
     <div>
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <button
+          onClick={onGerarLancamentos}
+          disabled={gerando}
+          className="t-colors rounded-lg border border-line px-3.5 py-2 text-sm font-medium text-ink-soft hover:bg-ink/5 disabled:opacity-60"
+          title={`Gera as despesas fixas para ${labelMesReferencia(mesSelecionado)}`}
+        >
+          {gerando ? "Gerando…" : `Gerar despesas fixas de ${labelMesReferencia(mesSelecionado)}`}
+        </button>
         <button onClick={onNew} className="t-colors rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-glow hover:bg-brand-dark">
           + Nova despesa fixa
         </button>
@@ -1003,7 +1273,22 @@ function DespesasFixasTab({
         ) : (
           <ul className="divide-y divide-line">
             {despesas.map((d) => (
-              <li key={d.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-5">
+              <li
+                key={d.id}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setMenu({
+                    x: e.clientX,
+                    y: e.clientY,
+                    opcoes: [
+                      { label: "Ver pasta (ano/mês)", onClick: () => onAbrirPasta(d) },
+                      { label: "Editar", onClick: () => onEdit(d) },
+                      { label: "Excluir", tone: "danger", onClick: () => onDelete(d) },
+                    ],
+                  });
+                }}
+                className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-5"
+              >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-ink">
                     {d.descricao}
@@ -1011,24 +1296,138 @@ function DespesasFixasTab({
                   </p>
                   <p className="text-xs text-ink-soft">
                     vence todo dia {d.dia_vencimento} {d.categoria && `· ${d.categoria}`}
-                    {d.pasta_url && (
-                      <>
-                        {" · "}
-                        <a href={d.pasta_url} target="_blank" rel="noreferrer" className="text-brand underline">pasta</a>
-                      </>
-                    )}
                   </p>
                 </div>
                 <span className="tnum text-sm font-semibold text-ink">
                   {d.valor != null ? brl(Number(d.valor)) : "valor variável"}
                 </span>
-                <button onClick={() => onEdit(d)} className="rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5">✎</button>
-                <button onClick={() => onDelete(d)} className="rounded-lg px-2 py-1.5 text-xs text-rose-500 hover:bg-rose-500/10">🗑</button>
+                <button
+                  onClick={() => onAbrirPasta(d)}
+                  title="Ver pasta desta despesa (organizada por ano/mês)"
+                  className="t-colors rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5"
+                >
+                  📁
+                </button>
+                <BotaoMenu
+                  onAbrir={(pos) =>
+                    setMenu({
+                      ...pos,
+                      opcoes: [
+                        { label: "Ver pasta (ano/mês)", onClick: () => onAbrirPasta(d) },
+                        { label: "Editar", onClick: () => onEdit(d) },
+                        { label: "Excluir", tone: "danger", onClick: () => onDelete(d) },
+                      ],
+                    })
+                  }
+                />
               </li>
             ))}
           </ul>
         )}
       </div>
+      {menu && <ContextMenu menu={menu} onFechar={() => setMenu(null)} />}
+    </div>
+  );
+}
+
+// ===================== Recebimentos Recorrentes =====================
+
+function ReceitasRecorrentesTab({
+  receitas,
+  mesSelecionado,
+  onGerarLancamentos,
+  gerando,
+  onNew,
+  onEdit,
+  onDelete,
+  onAbrirPasta,
+}: {
+  receitas: ReceitaRecorrente[];
+  mesSelecionado: string;
+  onGerarLancamentos: () => void;
+  gerando: boolean;
+  onNew: () => void;
+  onEdit: (r: ReceitaRecorrente) => void;
+  onDelete: (r: ReceitaRecorrente) => void;
+  onAbrirPasta: (r: ReceitaRecorrente) => void;
+}) {
+  const [menu, setMenu] = useState<MenuContextoState | null>(null);
+  useFecharMenuAoClicarFora(!!menu, () => setMenu(null));
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <button
+          onClick={onGerarLancamentos}
+          disabled={gerando}
+          className="t-colors rounded-lg border border-line px-3.5 py-2 text-sm font-medium text-ink-soft hover:bg-ink/5 disabled:opacity-60"
+          title={`Gera os recebimentos recorrentes de ${labelMesReferencia(mesSelecionado)}`}
+        >
+          {gerando ? "Gerando…" : `Gerar recebimentos de ${labelMesReferencia(mesSelecionado)}`}
+        </button>
+        <button onClick={onNew} className="t-colors rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-glow hover:bg-brand-dark">
+          + Novo recebimento recorrente
+        </button>
+      </div>
+      <div className="mt-4 overflow-hidden rounded-2xl border border-line glass">
+        {receitas.length === 0 ? (
+          <p className="p-8 text-center text-sm text-ink-soft">Nenhum recebimento recorrente cadastrado.</p>
+        ) : (
+          <ul className="divide-y divide-line">
+            {receitas.map((r) => (
+              <li
+                key={r.id}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setMenu({
+                    x: e.clientX,
+                    y: e.clientY,
+                    opcoes: [
+                      { label: "Ver pasta (ano/mês)", onClick: () => onAbrirPasta(r) },
+                      { label: "Editar", onClick: () => onEdit(r) },
+                      { label: "Excluir", tone: "danger", onClick: () => onDelete(r) },
+                    ],
+                  });
+                }}
+                className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-5"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-ink">
+                    {r.descricao}
+                    {!r.ativo && <span className="ml-2 rounded-full bg-ink/10 px-2 py-0.5 text-[11px] font-semibold text-ink-faint">pausado</span>}
+                  </p>
+                  <p className="text-xs text-ink-soft">
+                    vence todo dia {r.dia_vencimento} {r.categoria && `· ${r.categoria}`}
+                  </p>
+                </div>
+                <span className="tnum text-sm font-semibold text-ink">
+                  {r.valor != null ? brl(Number(r.valor)) : "valor variável"}
+                </span>
+                <button
+                  onClick={() => onAbrirPasta(r)}
+                  title="Ver pasta deste recebimento (organizada por ano/mês)"
+                  className="t-colors rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5"
+                >
+                  📁
+                </button>
+                <BotaoMenu
+                  onAbrir={(pos) =>
+                    setMenu({
+                      ...pos,
+                      opcoes: [
+                        { label: "Ver pasta (ano/mês)", onClick: () => onAbrirPasta(r) },
+                        { label: "Editar", onClick: () => onEdit(r) },
+                        { label: "Excluir", tone: "danger", onClick: () => onDelete(r) },
+                      ],
+                    })
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      {menu && <ContextMenu menu={menu} onFechar={() => setMenu(null)} />}
     </div>
   );
 }
@@ -1040,11 +1439,13 @@ function TopBar({
   newLabel,
   filtro,
   setFiltro,
+  extraButton,
 }: {
   onNew: () => void;
   newLabel: string;
   filtro: string;
   setFiltro: (f: "todos" | "atrasado" | "pendente" | "pago") => void;
+  extraButton?: { label: string; onClick: () => void };
 }) {
   const FILTROS = [
     { id: "todos", label: "Todos" },
@@ -1067,9 +1468,19 @@ function TopBar({
           </button>
         ))}
       </div>
-      <button onClick={onNew} className="t-colors rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-glow hover:bg-brand-dark">
-        {newLabel}
-      </button>
+      <div className="flex flex-wrap gap-2">
+        {extraButton && (
+          <button
+            onClick={extraButton.onClick}
+            className="t-colors rounded-lg border border-line px-3.5 py-2 text-sm font-medium text-ink-soft hover:bg-ink/5"
+          >
+            {extraButton.label}
+          </button>
+        )}
+        <button onClick={onNew} className="t-colors rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-glow hover:bg-brand-dark">
+          {newLabel}
+        </button>
+      </div>
     </div>
   );
 }

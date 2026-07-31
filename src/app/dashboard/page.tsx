@@ -10,5 +10,5 @@ export default async function DashboardPage() {
 
   if (!user) redirect("/login");
 
-  return <DashboardClient userEmail={user.email ?? ""} />;
+  return <DashboardClient userEmail={user.email ?? ""} userId={user.id} />;
 }

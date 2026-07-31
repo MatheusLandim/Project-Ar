@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import { Overlay } from "@/components/ProjectForm";
 import {
   ContaPagar,
   ContaReceber,
   DespesaFixa,
+  ReceitaRecorrente,
   Fornecedor,
   Cliente,
   Projeto,
@@ -16,7 +18,12 @@ import {
   VINCULOS,
   VinculoTipo,
   CATEGORIAS_DESPESA,
+  FORMAS_PAGAMENTO,
+  FORMAS_TRANSFERENCIA,
+  PASTAS_MES,
+  TipoPasta,
   mesReferenciaAtual,
+  pastaCompetenciaTipo,
 } from "@/lib/types";
 import { hoje } from "@/lib/format";
 
@@ -108,21 +115,25 @@ export type FornecedorInput = {
   nome: string;
   cnpj_cpf: string | null;
   categoria: string | null;
+  tipo_pasta: TipoPasta;
   pasta_url: string | null;
 };
 
 export function FornecedorQuickForm({
   initial,
+  tipoPadrao,
   onCancel,
   onSave,
 }: {
   initial?: Fornecedor;
+  tipoPadrao?: TipoPasta;
   onCancel: () => void;
   onSave: (data: FornecedorInput) => Promise<void>;
 }) {
   const [nome, setNome] = useState(initial?.nome ?? "");
   const [doc, setDoc] = useState(initial?.cnpj_cpf ?? "");
   const [categoria, setCategoria] = useState(initial?.categoria ?? "");
+  const [tipoPasta, setTipoPasta] = useState<TipoPasta>(initial?.tipo_pasta ?? tipoPadrao ?? "variavel");
   const [saving, setSaving] = useState(false);
 
   async function submit(e: React.FormEvent) {
@@ -132,6 +143,7 @@ export function FornecedorQuickForm({
       nome: nome.trim(),
       cnpj_cpf: doc.trim() || null,
       categoria: categoria.trim() || null,
+      tipo_pasta: tipoPasta,
       pasta_url: initial?.pasta_url ?? null,
     });
     setSaving(false);
@@ -139,17 +151,54 @@ export function FornecedorQuickForm({
 
   return (
     <ModalShell
-      title={initial ? "Editar fornecedor" : "Novo fornecedor"}
+      title={initial ? "Editar pasta" : "Nova pasta"}
       onCancel={onCancel}
       onSubmit={submit}
       saving={saving}
-      submitLabel={initial ? "Salvar alterações" : "Salvar fornecedor"}
+      submitLabel={initial ? "Salvar alterações" : "Salvar pasta"}
     >
+      <Field label="Tipo de pasta" required hint="Muda só onde ela aparece — a estrutura da pasta é igual nos três casos.">
+        <div className="grid grid-cols-1 gap-2">
+          <button
+            type="button"
+            onClick={() => setTipoPasta("fixa")}
+            className={`t-colors rounded-lg border px-3 py-2.5 text-sm font-semibold ${
+              tipoPasta === "fixa"
+                ? "border-brand bg-brand-soft text-brand-dark"
+                : "border-line text-ink-soft hover:bg-ink/5"
+            }`}
+          >
+            Padrão (despesas fixas)
+          </button>
+          <button
+            type="button"
+            onClick={() => setTipoPasta("variavel")}
+            className={`t-colors rounded-lg border px-3 py-2.5 text-sm font-semibold ${
+              tipoPasta === "variavel"
+                ? "border-brand bg-brand-soft text-brand-dark"
+                : "border-line text-ink-soft hover:bg-ink/5"
+            }`}
+          >
+            Variável (despesas variáveis)
+          </button>
+          <button
+            type="button"
+            onClick={() => setTipoPasta("receita_recorrente")}
+            className={`t-colors rounded-lg border px-3 py-2.5 text-sm font-semibold ${
+              tipoPasta === "receita_recorrente"
+                ? "border-brand bg-brand-soft text-brand-dark"
+                : "border-line text-ink-soft hover:bg-ink/5"
+            }`}
+          >
+            Recebimento recorrente (receita)
+          </button>
+        </div>
+      </Field>
       <Field label="Nome / Razão social" required>
         <input required value={nome} onChange={(e) => setNome(e.target.value)} className={input} />
       </Field>
-      <Field label="CNPJ / CPF">
-        <input value={doc} onChange={(e) => setDoc(e.target.value)} className={input} />
+      <Field label="CNPJ / CPF (ou descrição)">
+        <input value={doc} onChange={(e) => setDoc(e.target.value)} className={input} placeholder="00.000.000/0000-00 ou uma descrição livre" />
       </Field>
       <Field label="Categoria" hint="Ex.: material, ferramenta, serviço">
         <input value={categoria} onChange={(e) => setCategoria(e.target.value)} className={input} />
@@ -222,6 +271,7 @@ export function ContaPagarForm({
   initial,
   fornecedores,
   projetos,
+  despesasFixas,
   onCancel,
   onSave,
   onNovoFornecedor,
@@ -229,27 +279,100 @@ export function ContaPagarForm({
   initial?: ContaPagar;
   fornecedores: Fornecedor[];
   projetos: Projeto[];
+  despesasFixas: DespesaFixa[];
   onCancel: () => void;
-  onSave: (data: ContaPagarInput) => Promise<void>;
+  onSave: (data: ContaPagarInput) => Promise<string | null>;
   onNovoFornecedor: () => void;
 }) {
+  const supabase = createClient();
+  const [categoriaDespesa, setCategoriaDespesa] = useState<"fixa" | "variavel">(
+    initial?.despesa_fixa_id ? "fixa" : "variavel"
+  );
+  const [despesaFixaId, setDespesaFixaId] = useState(initial?.despesa_fixa_id ?? "");
   const [tipo, setTipo] = useState(initial?.tipo ?? "despesa_extra");
   const [descricao, setDescricao] = useState(initial?.descricao ?? "");
   const [fornecedorId, setFornecedorId] = useState(initial?.fornecedor_id ?? "");
   const [categoria, setCategoria] = useState(initial?.categoria ?? "");
   const [valor, setValor] = useState(String(initial?.valor ?? ""));
+  const [formaPagamento, setFormaPagamento] = useState(initial?.forma_pagamento ?? FORMAS_PAGAMENTO[0]);
+  const [mesCompetencia, setMesCompetencia] = useState(
+    initial?.mes_competencia ?? (initial?.vencimento ? initial.vencimento.slice(0, 7) : mesReferenciaAtual())
+  );
   const [vencimento, setVencimento] = useState(initial?.vencimento ?? hoje());
   const [dataPagamento, setDataPagamento] = useState(initial?.data_pagamento ?? "");
-  const [formaPagamento, setFormaPagamento] = useState(initial?.forma_pagamento ?? "");
   const [vinculoTipo, setVinculoTipo] = useState<VinculoTipo>(initial?.vinculo_tipo ?? "nenhum");
   const [obraId, setObraId] = useState(initial?.obra_id ?? "");
   const [observacoes, setObservacoes] = useState(initial?.observacoes ?? "");
+  const [arquivos, setArquivos] = useState<Record<string, File | null>>({
+    Boletos: null,
+    Comprovantes: null,
+    Recibos: null,
+    "Notas Fiscais": null,
+  });
   const [saving, setSaving] = useState(false);
+  const [enviandoArquivos, setEnviandoArquivos] = useState(false);
+
+  function selecionarDespesaFixa(id: string) {
+    setDespesaFixaId(id);
+    const d = despesasFixas.find((x) => x.id === id);
+    if (d) {
+      setDescricao(d.descricao);
+      if (d.categoria) setCategoria(d.categoria);
+      if (d.valor != null) setValor(String(d.valor));
+      if (d.fornecedor_id) setFornecedorId(d.fornecedor_id);
+    }
+  }
+
+  // Fornecedor que hospeda a pasta desse lançamento: direto (variável) ou
+  // herdado da despesa fixa selecionada.
+  function fornecedorDaPasta(): string | null {
+    if (categoriaDespesa === "fixa") {
+      const d = despesasFixas.find((x) => x.id === despesaFixaId);
+      return d?.fornecedor_id ?? null;
+    }
+    return fornecedorId || null;
+  }
+
+  async function enviarArquivos(lancamentoId: string) {
+    const fId = fornecedorDaPasta();
+    if (!fId || !mesCompetencia) return;
+    const pendentes = Object.entries(arquivos).filter(([, f]) => f);
+    if (pendentes.length === 0) return;
+
+    setEnviandoArquivos(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      for (const [tipoDoc, file] of pendentes) {
+        if (!file) continue;
+        const limpo = file.name.replace(/[^\w.\-]+/g, "_");
+        const path = `${user.id}/pastas/fornecedor/${fId}/${Date.now()}_${limpo}`;
+        const up = await supabase.storage.from("anexos").upload(path, file);
+        if (up.error) continue;
+        await supabase.from("documentos").insert({
+          entidade_tipo: "fornecedor",
+          entidade_id: fId,
+          lancamento_tipo: "pagar",
+          lancamento_id: lancamentoId,
+          pasta: pastaCompetenciaTipo(mesCompetencia, tipoDoc),
+          nome: file.name,
+          path,
+          tamanho: file.size,
+        });
+      }
+    } finally {
+      setEnviandoArquivos(false);
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    await onSave({
+    const ehFixa = categoriaDespesa === "fixa";
+    const id = await onSave({
       tipo,
       descricao: descricao.trim(),
       fornecedor_id: fornecedorId || null,
@@ -257,15 +380,17 @@ export function ContaPagarForm({
       valor: Number(valor) || 0,
       vencimento: vencimento || null,
       data_pagamento: dataPagamento || null,
-      forma_pagamento: formaPagamento.trim() || null,
+      forma_pagamento: formaPagamento || null,
       anexo_url: initial?.anexo_url ?? null,
-      obra_id: vinculoTipo === "obra" ? obraId || null : null,
-      vinculo_tipo: vinculoTipo,
-      vinculo_id: vinculoTipo === "obra" ? obraId || null : null,
+      obra_id: !ehFixa && vinculoTipo === "obra" ? obraId || null : null,
+      vinculo_tipo: ehFixa ? "despesa_fixa" : vinculoTipo,
+      vinculo_id: ehFixa ? despesaFixaId || null : vinculoTipo === "obra" ? obraId || null : null,
       pasta_url: initial?.pasta_url ?? null,
-      despesa_fixa_id: initial?.despesa_fixa_id ?? null,
+      despesa_fixa_id: ehFixa ? despesaFixaId || null : null,
+      mes_competencia: mesCompetencia || null,
       observacoes: observacoes.trim() || null,
     });
+    if (id) await enviarArquivos(id);
     setSaving(false);
   }
 
@@ -277,35 +402,100 @@ export function ContaPagarForm({
       saving={saving}
       submitLabel="Salvar lançamento"
     >
-      <Field label="Descrição" required>
-        <input required value={descricao} onChange={(e) => setDescricao(e.target.value)} className={input} />
+      <Field label="Tipo de despesa" required>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setCategoriaDespesa("fixa")}
+            className={`t-colors flex-1 rounded-lg border px-3 py-2.5 text-sm font-semibold ${
+              categoriaDespesa === "fixa"
+                ? "border-brand bg-brand-soft text-brand-dark"
+                : "border-line text-ink-soft hover:bg-ink/5"
+            }`}
+          >
+            Fixa
+          </button>
+          <button
+            type="button"
+            onClick={() => setCategoriaDespesa("variavel")}
+            className={`t-colors flex-1 rounded-lg border px-3 py-2.5 text-sm font-semibold ${
+              categoriaDespesa === "variavel"
+                ? "border-brand bg-brand-soft text-brand-dark"
+                : "border-line text-ink-soft hover:bg-ink/5"
+            }`}
+          >
+            Variável
+          </button>
+        </div>
       </Field>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Tipo">
-          <select value={tipo} onChange={(e) => setTipo(e.target.value as typeof tipo)} className={input}>
-            {Object.entries(TIPOS_CONTA_PAGAR).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
+      {categoriaDespesa === "fixa" ? (
+        <Field label="Qual despesa fixa?" required hint="O anexo desse lançamento vai automático pra pasta dessa despesa, no mês certo.">
+          <select
+            required
+            value={despesaFixaId}
+            onChange={(e) => selecionarDespesaFixa(e.target.value)}
+            className={input}
+          >
+            <option value="">— selecione —</option>
+            {despesasFixas.map((d) => (
+              <option key={d.id} value={d.id}>{d.descricao}</option>
             ))}
           </select>
         </Field>
-        <Field label="Categoria">
-          <input
-            list="categorias-despesa"
-            value={categoria}
-            onChange={(e) => setCategoria(e.target.value)}
-            className={input}
-          />
-          <datalist id="categorias-despesa">
-            {CATEGORIAS_DESPESA.map((c) => <option key={c} value={c} />)}
-          </datalist>
+      ) : (
+        <Field label="Descrição" required>
+          <input required value={descricao} onChange={(e) => setDescricao(e.target.value)} className={input} />
         </Field>
+      )}
+
+      {categoriaDespesa === "variavel" && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Tipo">
+            <select value={tipo} onChange={(e) => setTipo(e.target.value as typeof tipo)} className={input}>
+              {Object.entries(TIPOS_CONTA_PAGAR).map(([k, v]) => (
+                <option key={k} value={k}>{v}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Categoria">
+            <input
+              list="categorias-despesa"
+              value={categoria}
+              onChange={(e) => setCategoria(e.target.value)}
+              className={input}
+            />
+            <datalist id="categorias-despesa">
+              {CATEGORIAS_DESPESA.map((c) => <option key={c} value={c} />)}
+            </datalist>
+          </Field>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Valor (R$)" required>
           <input required type="number" step="0.01" value={valor} onChange={(e) => setValor(e.target.value)} className={input} />
         </Field>
         <Field label="Forma de pagamento">
-          <input value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)} className={input} placeholder="Pix, boleto, cartão…" />
+          <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)} className={input}>
+            {FORMAS_PAGAMENTO.map((f) => <option key={f} value={f}>{f}</option>)}
+          </select>
         </Field>
+      </div>
+
+      <Field
+        label="Mês da despesa"
+        hint="O mês a que a despesa se refere — ex.: o DAS de junho é pago em julho, mas fica marcado como Junho."
+      >
+        <input
+          type="month"
+          value={mesCompetencia}
+          onChange={(e) => setMesCompetencia(e.target.value)}
+          className={input}
+        />
+      </Field>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Vencimento">
           <input type="date" value={vencimento ?? ""} onChange={(e) => setVencimento(e.target.value)} className={input} />
         </Field>
@@ -326,16 +516,20 @@ export function ContaPagarForm({
             </button>
           </div>
         </Field>
-        <Field label="Vínculo">
-          <select value={vinculoTipo} onChange={(e) => setVinculoTipo(e.target.value as VinculoTipo)} className={input}>
-            {Object.entries(VINCULOS).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </select>
-        </Field>
+        {categoriaDespesa === "variavel" && (
+          <Field label="Vínculo">
+            <select value={vinculoTipo} onChange={(e) => setVinculoTipo(e.target.value as VinculoTipo)} className={input}>
+              {Object.entries(VINCULOS)
+                .filter(([k]) => k !== "despesa_fixa")
+                .map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
+            </select>
+          </Field>
+        )}
       </div>
 
-      {vinculoTipo === "obra" && (
+      {categoriaDespesa === "variavel" && vinculoTipo === "obra" && (
         <Field label="Obra vinculada">
           <select value={obraId ?? ""} onChange={(e) => setObraId(e.target.value)} className={input}>
             <option value="">— selecione —</option>
@@ -344,9 +538,34 @@ export function ContaPagarForm({
         </Field>
       )}
 
-      <p className="text-[11px] text-ink-faint">
-        Comprovante, boleto ou nota fiscal deste lançamento: anexe pelo botão 📎 na lista de Contas a Pagar, depois de salvar.
-      </p>
+      <div className="border-t border-line pt-4">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+          Anexar agora (opcional)
+        </p>
+        {fornecedorDaPasta() ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {PASTAS_MES.map((tipoDoc) => (
+              <label key={tipoDoc} className="block">
+                <span className="mb-1 block text-xs font-medium text-ink-soft">{tipoDoc}</span>
+                <input
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg,.webp,.xml"
+                  onChange={(e) =>
+                    setArquivos((prev) => ({ ...prev, [tipoDoc]: e.target.files?.[0] ?? null }))
+                  }
+                  className="block w-full text-xs text-ink-soft file:mr-2 file:rounded-lg file:border-0 file:bg-brand-soft file:px-2.5 file:py-1.5 file:text-xs file:font-semibold file:text-brand-dark"
+                />
+              </label>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-ink-faint">
+            Selecione uma despesa fixa ou um fornecedor acima pra poder anexar aqui — cada
+            arquivo já vai direto pra pasta certa (ano/mês/tipo).
+          </p>
+        )}
+      </div>
+
       <Field label="Observações">
         <textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} rows={2} className={`${input} resize-none`} />
       </Field>
@@ -362,6 +581,8 @@ export function ContaReceberForm({
   initial,
   clientes,
   projetos,
+  fornecedores,
+  receitasRecorrentes,
   onCancel,
   onSave,
   onNovoCliente,
@@ -369,26 +590,91 @@ export function ContaReceberForm({
   initial?: ContaReceber;
   clientes: Cliente[];
   projetos: Projeto[];
+  fornecedores: Fornecedor[];
+  receitasRecorrentes: ReceitaRecorrente[];
   onCancel: () => void;
-  onSave: (data: ContaReceberInput) => Promise<void>;
+  onSave: (data: ContaReceberInput) => Promise<string | null>;
   onNovoCliente: () => void;
 }) {
+  const supabase = createClient();
+  const [categoriaReceita, setCategoriaReceita] = useState<"recorrente" | "variavel">(
+    initial?.receita_recorrente_id ? "recorrente" : "variavel"
+  );
+  const [receitaRecorrenteId, setReceitaRecorrenteId] = useState(initial?.receita_recorrente_id ?? "");
   const [clienteId, setClienteId] = useState(initial?.cliente_id ?? "");
   const [obraId, setObraId] = useState(initial?.obra_id ?? "");
   const [tipo, setTipo] = useState(initial?.tipo ?? "boleto");
   const [valor, setValor] = useState(String(initial?.valor ?? ""));
+  const [mesCompetencia, setMesCompetencia] = useState(
+    initial?.mes_competencia ?? (initial?.vencimento ? initial.vencimento.slice(0, 7) : mesReferenciaAtual())
+  );
   const [vencimento, setVencimento] = useState(initial?.vencimento ?? hoje());
   const [dataRecebimento, setDataRecebimento] = useState(initial?.data_recebimento ?? "");
   const [numeroNf, setNumeroNf] = useState(initial?.numero_nf ?? "");
   const [observacoes, setObservacoes] = useState(initial?.observacoes ?? "");
+  const [arquivos, setArquivos] = useState<Record<string, File | null>>({
+    Boletos: null,
+    Comprovantes: null,
+    Recibos: null,
+    "Notas Fiscais": null,
+  });
   const [saving, setSaving] = useState(false);
+
+  function selecionarReceitaRecorrente(id: string) {
+    setReceitaRecorrenteId(id);
+    const r = receitasRecorrentes.find((x) => x.id === id);
+    if (r) {
+      if (r.categoria) setNumeroNf(numeroNf); // no-op, mantém
+      if (r.valor != null) setValor(String(r.valor));
+    }
+  }
+
+  function fornecedorDaPasta(): string | null {
+    if (categoriaReceita === "recorrente") {
+      const r = receitasRecorrentes.find((x) => x.id === receitaRecorrenteId);
+      return r?.fornecedor_id ?? null;
+    }
+    return null;
+  }
+
+  async function enviarArquivos(lancamentoId: string) {
+    const fId = fornecedorDaPasta();
+    if (!fId || !mesCompetencia) return;
+    const pendentes = Object.entries(arquivos).filter(([, f]) => f);
+    if (pendentes.length === 0) return;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    for (const [tipoDoc, file] of pendentes) {
+      if (!file) continue;
+      const limpo = file.name.replace(/[^\w.\-]+/g, "_");
+      const path = `${user.id}/pastas/fornecedor/${fId}/${Date.now()}_${limpo}`;
+      const up = await supabase.storage.from("anexos").upload(path, file);
+      if (up.error) continue;
+      await supabase.from("documentos").insert({
+        entidade_tipo: "fornecedor",
+        entidade_id: fId,
+        lancamento_tipo: "receber",
+        lancamento_id: lancamentoId,
+        pasta: pastaCompetenciaTipo(mesCompetencia, tipoDoc),
+        nome: file.name,
+        path,
+        tamanho: file.size,
+      });
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    await onSave({
-      cliente_id: clienteId || null,
-      obra_id: obraId || null,
+    const ehRecorrente = categoriaReceita === "recorrente";
+    const id = await onSave({
+      cliente_id: !ehRecorrente ? clienteId || null : null,
+      obra_id: !ehRecorrente ? obraId || null : null,
+      fornecedor_id: ehRecorrente ? fornecedorDaPasta() : null,
+      receita_recorrente_id: ehRecorrente ? receitaRecorrenteId || null : null,
+      mes_competencia: mesCompetencia || null,
       tipo,
       valor: Number(valor) || 0,
       vencimento: vencimento || null,
@@ -398,6 +684,7 @@ export function ContaReceberForm({
       pasta_url: initial?.pasta_url ?? null,
       observacoes: observacoes.trim() || null,
     });
+    if (id) await enviarArquivos(id);
     setSaving(false);
   }
 
@@ -409,25 +696,74 @@ export function ContaReceberForm({
       saving={saving}
       submitLabel="Salvar lançamento"
     >
-      <Field label="Cliente">
+      <Field label="Tipo de recebimento" required>
         <div className="flex gap-2">
-          <select value={clienteId ?? ""} onChange={(e) => setClienteId(e.target.value)} className={input}>
-            <option value="">— nenhum —</option>
-            {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-          </select>
-          <button type="button" onClick={onNovoCliente} className="shrink-0 rounded-lg border border-line px-3 text-sm text-ink-soft hover:bg-ink/5">
-            + novo
+          <button
+            type="button"
+            onClick={() => setCategoriaReceita("variavel")}
+            className={`t-colors flex-1 rounded-lg border px-3 py-2.5 text-sm font-semibold ${
+              categoriaReceita === "variavel"
+                ? "border-brand bg-brand-soft text-brand-dark"
+                : "border-line text-ink-soft hover:bg-ink/5"
+            }`}
+          >
+            Ligado a obra/orçamento
+          </button>
+          <button
+            type="button"
+            onClick={() => setCategoriaReceita("recorrente")}
+            className={`t-colors flex-1 rounded-lg border px-3 py-2.5 text-sm font-semibold ${
+              categoriaReceita === "recorrente"
+                ? "border-brand bg-brand-soft text-brand-dark"
+                : "border-line text-ink-soft hover:bg-ink/5"
+            }`}
+          >
+            Recebimento recorrente
           </button>
         </div>
       </Field>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Obra vinculada">
-          <select value={obraId ?? ""} onChange={(e) => setObraId(e.target.value)} className={input}>
-            <option value="">— nenhuma —</option>
-            {projetos.map((p) => <option key={p.id} value={p.id}>{p.cliente} · {p.projeto}</option>)}
+      {categoriaReceita === "variavel" ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Cliente">
+            <div className="flex gap-2">
+              <select value={clienteId ?? ""} onChange={(e) => setClienteId(e.target.value)} className={input}>
+                <option value="">— nenhum —</option>
+                {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+              <button type="button" onClick={onNovoCliente} className="shrink-0 rounded-lg border border-line px-3 text-sm text-ink-soft hover:bg-ink/5">
+                + novo
+              </button>
+            </div>
+          </Field>
+          <Field label="Obra vinculada">
+            <select value={obraId ?? ""} onChange={(e) => setObraId(e.target.value)} className={input}>
+              <option value="">— nenhuma —</option>
+              {projetos.map((p) => <option key={p.id} value={p.id}>{p.cliente} · {p.projeto}</option>)}
+            </select>
+          </Field>
+        </div>
+      ) : (
+        <Field
+          label="Qual recebimento recorrente?"
+          required
+          hint="O anexo desse lançamento vai automático pra pasta desse contratante, no mês certo."
+        >
+          <select
+            required
+            value={receitaRecorrenteId}
+            onChange={(e) => selecionarReceitaRecorrente(e.target.value)}
+            className={input}
+          >
+            <option value="">— selecione —</option>
+            {receitasRecorrentes.map((r) => (
+              <option key={r.id} value={r.id}>{r.descricao}</option>
+            ))}
           </select>
         </Field>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Tipo">
           <select value={tipo} onChange={(e) => setTipo(e.target.value as typeof tipo)} className={input}>
             {Object.entries(TIPOS_CONTA_RECEBER).map(([k, v]) => (
@@ -441,6 +777,12 @@ export function ContaReceberForm({
         <Field label="Nº da nota fiscal">
           <input value={numeroNf} onChange={(e) => setNumeroNf(e.target.value)} className={input} />
         </Field>
+        <Field
+          label="Mês da receita"
+          hint="Mês a que o recebimento se refere, mesmo se vencer/receber no mês seguinte."
+        >
+          <input type="month" value={mesCompetencia} onChange={(e) => setMesCompetencia(e.target.value)} className={input} />
+        </Field>
         <Field label="Vencimento">
           <input type="date" value={vencimento ?? ""} onChange={(e) => setVencimento(e.target.value)} className={input} />
         </Field>
@@ -449,9 +791,34 @@ export function ContaReceberForm({
         </Field>
       </div>
 
-      <p className="text-[11px] text-ink-faint">
-        Comprovante, boleto ou nota fiscal deste lançamento: anexe pelo botão 📎 na lista de Contas a Receber, depois de salvar.
-      </p>
+      <div className="border-t border-line pt-4">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+          Anexar agora (opcional) — boleto, NF ou recibo que a gente emite
+        </p>
+        {fornecedorDaPasta() ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {PASTAS_MES.map((tipoDoc) => (
+              <label key={tipoDoc} className="block">
+                <span className="mb-1 block text-xs font-medium text-ink-soft">{tipoDoc}</span>
+                <input
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg,.webp,.xml"
+                  onChange={(e) =>
+                    setArquivos((prev) => ({ ...prev, [tipoDoc]: e.target.files?.[0] ?? null }))
+                  }
+                  className="block w-full text-xs text-ink-soft file:mr-2 file:rounded-lg file:border-0 file:bg-brand-soft file:px-2.5 file:py-1.5 file:text-xs file:font-semibold file:text-brand-dark"
+                />
+              </label>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-ink-faint">
+            Selecione um recebimento recorrente acima pra poder anexar aqui — cada arquivo já vai
+            direto pra pasta certa (ano/mês/tipo).
+          </p>
+        )}
+      </div>
+
       <Field label="Observações">
         <textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} rows={2} className={`${input} resize-none`} />
       </Field>
@@ -465,18 +832,20 @@ export type DespesaFixaInput = Omit<DespesaFixa, "id" | "criado_em">;
 
 export function DespesaFixaForm({
   initial,
+  fornecedores,
   onCancel,
   onSave,
 }: {
   initial?: DespesaFixa;
+  fornecedores: Fornecedor[];
   onCancel: () => void;
   onSave: (data: DespesaFixaInput) => Promise<void>;
 }) {
   const [descricao, setDescricao] = useState(initial?.descricao ?? "");
   const [categoria, setCategoria] = useState(initial?.categoria ?? "");
+  const [fornecedorId, setFornecedorId] = useState(initial?.fornecedor_id ?? "");
   const [valor, setValor] = useState(initial?.valor != null ? String(initial.valor) : "");
   const [dia, setDia] = useState(String(initial?.dia_vencimento ?? 5));
-  const [pastaUrl, setPastaUrl] = useState(initial?.pasta_url ?? "");
   const [ativo, setAtivo] = useState(initial?.ativo ?? true);
   const [saving, setSaving] = useState(false);
 
@@ -486,9 +855,10 @@ export function DespesaFixaForm({
     await onSave({
       descricao: descricao.trim(),
       categoria: categoria.trim() || null,
+      fornecedor_id: fornecedorId || null,
       valor: valor.trim() === "" ? null : Number(valor),
       dia_vencimento: Math.min(31, Math.max(1, Number(dia) || 5)),
-      pasta_url: pastaUrl.trim() || null,
+      pasta_url: initial?.pasta_url ?? null,
       ativo,
     });
     setSaving(false);
@@ -504,6 +874,15 @@ export function DespesaFixaForm({
     >
       <Field label="Descrição" required hint="Ex.: Contabilidade, DAS, DARF, Convênio, Fatura Cartão">
         <input required value={descricao} onChange={(e) => setDescricao(e.target.value)} className={input} />
+      </Field>
+      <Field
+        label="Pasta (Fornecedores)"
+        hint="A pasta dessa despesa fixa fica dentro dela — cadastre em Fornecedores → Despesas fixas, se ainda não existir."
+      >
+        <select value={fornecedorId} onChange={(e) => setFornecedorId(e.target.value)} className={input}>
+          <option value="">— nenhuma —</option>
+          {fornecedores.map((f) => <option key={f.id} value={f.id}>{f.nome}</option>)}
+        </select>
       </Field>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Categoria">
@@ -530,9 +909,84 @@ export function DespesaFixaForm({
           </select>
         </Field>
       </div>
-      <Field label="Link da pasta (nuvem)">
-        <input value={pastaUrl} onChange={(e) => setPastaUrl(e.target.value)} className={input} placeholder="https://..." />
+    </ModalShell>
+  );
+}
+
+// ===================== Receita Recorrente =====================
+
+export type ReceitaRecorrenteInput = Omit<ReceitaRecorrente, "id" | "criado_em">;
+
+export function ReceitaRecorrenteForm({
+  initial,
+  fornecedores,
+  onCancel,
+  onSave,
+}: {
+  initial?: ReceitaRecorrente;
+  fornecedores: Fornecedor[];
+  onCancel: () => void;
+  onSave: (data: ReceitaRecorrenteInput) => Promise<void>;
+}) {
+  const [descricao, setDescricao] = useState(initial?.descricao ?? "");
+  const [categoria, setCategoria] = useState(initial?.categoria ?? "");
+  const [fornecedorId, setFornecedorId] = useState(initial?.fornecedor_id ?? "");
+  const [valor, setValor] = useState(initial?.valor != null ? String(initial.valor) : "");
+  const [dia, setDia] = useState(String(initial?.dia_vencimento ?? 5));
+  const [ativo, setAtivo] = useState(initial?.ativo ?? true);
+  const [saving, setSaving] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    await onSave({
+      descricao: descricao.trim(),
+      categoria: categoria.trim() || null,
+      fornecedor_id: fornecedorId || null,
+      valor: valor.trim() === "" ? null : Number(valor),
+      dia_vencimento: Math.min(31, Math.max(1, Number(dia) || 5)),
+      ativo,
+    });
+    setSaving(false);
+  }
+
+  return (
+    <ModalShell
+      title={initial ? "Editar recebimento recorrente" : "Novo recebimento recorrente"}
+      onCancel={onCancel}
+      onSubmit={submit}
+      saving={saving}
+      submitLabel="Salvar"
+    >
+      <Field label="Descrição" required hint="Ex.: Manutenção mensal — Condomínio Alfa">
+        <input required value={descricao} onChange={(e) => setDescricao(e.target.value)} className={input} />
       </Field>
+      <Field
+        label="Pasta (Fornecedores)"
+        hint="A pasta desse contratante fica dentro de Fornecedores → Recebimentos recorrentes."
+      >
+        <select value={fornecedorId} onChange={(e) => setFornecedorId(e.target.value)} className={input}>
+          <option value="">— nenhuma —</option>
+          {fornecedores.map((f) => <option key={f.id} value={f.id}>{f.nome}</option>)}
+        </select>
+      </Field>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="Categoria">
+          <input value={categoria} onChange={(e) => setCategoria(e.target.value)} className={input} />
+        </Field>
+        <Field label="Valor mensal (R$)" hint="Deixe vazio se variar todo mês">
+          <input type="number" step="0.01" value={valor} onChange={(e) => setValor(e.target.value)} className={input} />
+        </Field>
+        <Field label="Dia do vencimento" required>
+          <input required type="number" min={1} max={31} value={dia} onChange={(e) => setDia(e.target.value)} className={input} />
+        </Field>
+        <Field label="Ativo?">
+          <select value={ativo ? "1" : "0"} onChange={(e) => setAtivo(e.target.value === "1")} className={input}>
+            <option value="1">Sim, gerar todo mês</option>
+            <option value="0">Pausado</option>
+          </select>
+        </Field>
+      </div>
     </ModalShell>
   );
 }
@@ -548,23 +1002,30 @@ export function ProLaboreForm({
 }: {
   initial?: ProLabore;
   onCancel: () => void;
-  onSave: (data: ProLaboreInput) => Promise<void>;
+  onSave: (data: ProLaboreInput, comprovante: File | null) => Promise<void>;
 }) {
   const [mes, setMes] = useState(initial?.mes_referencia ?? mesReferenciaAtual());
   const [valor, setValor] = useState(String(initial?.valor ?? ""));
   const [dataPagamento, setDataPagamento] = useState(initial?.data_pagamento ?? "");
-  const [comprovante, setComprovante] = useState(initial?.comprovante_url ?? "");
+  const [formaTransferencia, setFormaTransferencia] = useState(
+    initial?.forma_transferencia ?? FORMAS_TRANSFERENCIA[0]
+  );
+  const [comprovante, setComprovante] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    await onSave({
-      mes_referencia: mes,
-      valor: Number(valor) || 0,
-      data_pagamento: dataPagamento || null,
-      comprovante_url: comprovante.trim() || null,
-    });
+    await onSave(
+      {
+        mes_referencia: mes,
+        valor: Number(valor) || 0,
+        data_pagamento: dataPagamento || null,
+        forma_transferencia: formaTransferencia || null,
+        comprovante_url: initial?.comprovante_url ?? null,
+      },
+      comprovante
+    );
     setSaving(false);
   }
 
@@ -577,19 +1038,29 @@ export function ProLaboreForm({
       submitLabel="Salvar"
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="Valor retirado (R$)" required>
+          <input required type="number" step="0.01" value={valor} onChange={(e) => setValor(e.target.value)} className={input} />
+        </Field>
+        <Field label="Data">
+          <input type="date" value={dataPagamento ?? ""} onChange={(e) => setDataPagamento(e.target.value)} className={input} />
+        </Field>
         <Field label="Mês de referência" required>
           <input required type="month" value={mes} onChange={(e) => setMes(e.target.value)} className={input} />
         </Field>
-        <Field label="Valor (R$)" required>
-          <input required type="number" step="0.01" value={valor} onChange={(e) => setValor(e.target.value)} className={input} />
-        </Field>
-        <Field label="Data do pagamento">
-          <input type="date" value={dataPagamento ?? ""} onChange={(e) => setDataPagamento(e.target.value)} className={input} />
-        </Field>
-        <Field label="Link do comprovante">
-          <input value={comprovante} onChange={(e) => setComprovante(e.target.value)} className={input} placeholder="https://..." />
+        <Field label="Tipo de transferência">
+          <select value={formaTransferencia} onChange={(e) => setFormaTransferencia(e.target.value)} className={input}>
+            {FORMAS_TRANSFERENCIA.map((f) => <option key={f} value={f}>{f}</option>)}
+          </select>
         </Field>
       </div>
+      <Field label="Comprovante" hint={initial?.comprovante_url ? "Já tem um comprovante anexado — escolher outro arquivo substitui." : undefined}>
+        <input
+          type="file"
+          accept=".pdf,.png,.jpg,.jpeg,.webp"
+          onChange={(e) => setComprovante(e.target.files?.[0] ?? null)}
+          className="block w-full text-sm text-ink-soft file:mr-3 file:rounded-lg file:border-0 file:bg-brand-soft file:px-3 file:py-2 file:text-sm file:font-semibold file:text-brand-dark"
+        />
+      </Field>
     </ModalShell>
   );
 }

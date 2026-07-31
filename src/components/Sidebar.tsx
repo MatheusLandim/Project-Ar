@@ -5,13 +5,13 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 
 export type View =
   | "overview"
-  | "obras"
   | "clientes"
   | "orcamentos"
   | "rt"
   | "documentos"
   | "financeiro"
-  | "fornecedores";
+  | "fornecedores"
+  | "configuracoes";
 
 const ITEMS: {
   id: View;
@@ -19,11 +19,10 @@ const ITEMS: {
   icon: React.ReactNode;
 }[] = [
   { id: "overview", label: "Visão geral", icon: <IconGrid /> },
-  { id: "clientes", label: "Clientes", icon: <IconUsers /> },
+  { id: "clientes", label: "Obras / Clientes", icon: <IconUsers /> },
   { id: "documentos", label: "Documentos", icon: <IconDoc /> },
   { id: "financeiro", label: "Financeiro", icon: <IconWallet /> },
   { id: "fornecedores", label: "Fornecedores", icon: <IconTruck /> },
-  { id: "obras", label: "Obras", icon: <IconBuilding /> },
   { id: "orcamentos", label: "Orçamentos", icon: <IconQuote /> },
   { id: "rt", label: "RT / ART", icon: <IconBadge /> },
 ];
@@ -37,6 +36,7 @@ export function Sidebar({
   onNew,
   open,
   onClose,
+  allowedItems,
 }: {
   active: View;
   onSelect: (v: View) => void;
@@ -46,7 +46,9 @@ export function Sidebar({
   onNew: () => void;
   open: boolean;
   onClose: () => void;
+  allowedItems?: View[] | null;
 }) {
+  const itensVisiveis = allowedItems ? ITEMS.filter((it) => allowedItems.includes(it.id)) : ITEMS;
   return (
     <>
       {/* Backdrop no mobile */}
@@ -83,7 +85,7 @@ export function Sidebar({
         </div>
 
         <nav className="mt-5 flex-1 space-y-1 px-3">
-          {ITEMS.map((it) => {
+          {itensVisiveis.map((it) => {
             const isActive = active === it.id;
             const badge = counts[it.id];
             return (
@@ -115,6 +117,17 @@ export function Sidebar({
         </nav>
 
         <div className="space-y-3 border-t border-line p-4">
+          <button
+            onClick={() => onSelect("configuracoes")}
+            className={`t-colors flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium ${
+              active === "configuracoes"
+                ? "bg-brand/12 text-brand ring-1 ring-inset ring-brand/25"
+                : "text-ink-soft hover:bg-ink/5 hover:text-ink"
+            }`}
+          >
+            <IconGear />
+            <span className="flex-1 text-left">Configurações</span>
+          </button>
           <div className="flex items-center justify-between">
             <span className="truncate text-xs text-ink-faint" title={userEmail}>
               {userEmail}
@@ -130,6 +143,20 @@ export function Sidebar({
         </div>
       </aside>
     </>
+  );
+}
+
+function IconGear() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+      <path
+        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 

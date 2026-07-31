@@ -8,8 +8,11 @@ import {
   LinhaReceber,
   ProLabore,
   Documento,
+  Projeto,
+  Configuracoes,
   labelMesReferencia,
   mesReferenciaAtual,
+  PASTAS_MES,
 } from "@/lib/types";
 import { brl, formatDate } from "@/lib/format";
 
@@ -26,20 +29,53 @@ const CNPJ = "50.784.117/0001-81";
 // for aberto depois disso, é só gerar de novo pela tela de Fluxo de Caixa.
 const VALIDADE_LINK_SEGUNDOS = 60 * 60 * 24 * 7;
 
-function linhasDoMes<T>(itens: T[], mes: string, campoData: (t: T) => string | null) {
+type BaseData = "vencimento" | "pagamento";
+
+function linhasNoPeriodo<T>(itens: T[], mesInicio: string, mesFim: string, campoData: (t: T) => string | null) {
   return itens.filter((i) => {
     const d = campoData(i);
-    return !!d && d.startsWith(mes);
+    if (!d) return false;
+    const mesItem = d.slice(0, 7);
+    return mesItem >= mesInicio && mesItem <= mesFim;
   });
 }
 
+// Pastas da obra cujos arquivos podem entrar no relatório — mesmos nomes
+// das pastas padrão criadas em cada obra. "Aprovação" fica de fora, não é
+// documento contábil.
+const PASTAS_CONTABEIS = ["Boleto", "Notas Fiscais e Recibos", "Comprovantes"];
+function daPastaContabil(pasta: string | null) {
+  if (!pasta) return false;
+  return PASTAS_CONTABEIS.some((p) => pasta === p || pasta.startsWith(`${p}/`));
+}
+
+// Pastas de fornecedor (fixa/variável/recorrente): a subpasta final dentro
+// de Ano/Mês precisa ser uma das categorias contábeis (Boletos, Comprovantes,
+// Recibos, Notas Fiscais).
+function daPastaContabilFornecedor(pasta: string | null) {
+  if (!pasta) return false;
+  const partes = pasta.split("/");
+  const ultima = partes[partes.length - 1];
+  return PASTAS_MES.includes(ultima);
+}
+
 type AnexoLink = { nome: string; url: string };
+type Candidato = {
+  id: string;
+  nome: string;
+  pasta: string;
+  url: string;
+  origemNome: string;
+  lancamentoIds: string[];
+};
 
 export function RelatorioMensalViewer({
   mes: mesInicial,
   contasPagar,
   recebiveis,
   proLabore,
+  projetos,
+  configuracoes,
   nomeFornecedor,
   onClose,
 }: {
@@ -47,29 +83,51 @@ export function RelatorioMensalViewer({
   contasPagar: ContaPagar[];
   recebiveis: LinhaReceber[];
   proLabore: ProLabore[];
+  projetos: Projeto[];
+  configuracoes?: Configuracoes | null;
   nomeFornecedor: (id: string | null) => string;
   onClose: () => void;
 }) {
   const supabase = createClient();
-  const [mes, setMes] = useState(mesInicial ?? mesReferenciaAtual());
-  const [anexosPorLancamento, setAnexosPorLancamento] = useState<Record<string, AnexoLink[]>>({});
+  const [mesInicio, setMesInicio] = useState(mesInicial ?? mesReferenciaAtual());
+  const [mesFim, setMesFim] = useState(mesInicial ?? mesReferenciaAtual());
+  const [baseData, setBaseData] = useState<BaseData>(
+    configuracoes?.relatorio_base_padrao === "vencimento" ? "vencimento" : "pagamento"
+  );
+  const [anexosDiretos, setAnexosDiretos] = useState<Record<string, AnexoLink[]>>({});
+  const [candidatos, setCandidatos] = useState<Candidato[]>([]);
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [carregandoAnexos, setCarregandoAnexos] = useState(true);
   const [erroAnexos, setErroAnexos] = useState<string | null>(null);
+  const [mostrarSelecao, setMostrarSelecao] = useState(false);
+
+  // "mes" continua existindo pra compor os textos/título do documento
+  // (quando o período é um único mês, mostra só ele; senão, o intervalo).
+  const periodoLabel =
+    mesInicio === mesFim
+      ? labelMesReferencia(mesInicio)
+      : `${labelMesReferencia(mesInicio)} – ${labelMesReferencia(mesFim)}`;
+
+  const campoDataPagar = (c: ContaPagar) => (baseData === "vencimento" ? c.vencimento : c.data_pagamento);
+  const campoDataReceber = (l: LinhaReceber) => (baseData === "vencimento" ? l.vencimento : l.dataRecebimento);
 
   const pagos = useMemo(
-    () => linhasDoMes(contasPagar, mes, (c) => c.data_pagamento),
-    [contasPagar, mes]
+    () => linhasNoPeriodo(contasPagar, mesInicio, mesFim, campoDataPagar),
+    [contasPagar, mesInicio, mesFim, baseData]
   );
   const recebidos = useMemo(
-    () => linhasDoMes(recebiveis, mes, (l) => l.dataRecebimento),
-    [recebiveis, mes]
+    () => linhasNoPeriodo(recebiveis, mesInicio, mesFim, campoDataReceber),
+    [recebiveis, mesInicio, mesFim, baseData]
   );
+
+  const nomeObra = (id: string) => projetos.find((p) => p.id === id)?.projeto || "Obra";
 
   useEffect(() => {
     let cancelado = false;
     async function carregar() {
       setCarregandoAnexos(true);
       setErroAnexos(null);
+      setSelecionados(new Set());
       const idsPagar = pagos.map((c) => c.id);
       const idsReceber = recebidos.map((c) => c.id);
       const consultas: any[] = [];
@@ -82,9 +140,61 @@ export function RelatorioMensalViewer({
           supabase.from("documentos").select("*").eq("lancamento_tipo", "receber").in("lancamento_id", idsReceber)
         );
 
-      if (consultas.length === 0) {
+      // Obras ligadas aos lançamentos do mês: também busca o que já está
+      // salvo nas pastas Boleto / Notas Fiscais e Recibos / Comprovantes
+      // de cada obra, como candidatos a incluir (você escolhe quais entram).
+      const obraIdsPagar = new Map<string, string[]>(); // obra_id -> [lancamento ids]
+      for (const c of pagos) {
+        if (!c.obra_id) continue;
+        obraIdsPagar.set(c.obra_id, [...(obraIdsPagar.get(c.obra_id) ?? []), c.id]);
+      }
+      const obraIdsReceber = new Map<string, string[]>();
+      for (const l of recebidos) {
+        if (!l.obraId) continue;
+        obraIdsReceber.set(l.obraId, [...(obraIdsReceber.get(l.obraId) ?? []), l.id]);
+      }
+      const todasObraIds = Array.from(
+        new Set([...Array.from(obraIdsPagar.keys()), ...Array.from(obraIdsReceber.keys())])
+      );
+      let consultaObras: any = null;
+      if (todasObraIds.length > 0) {
+        consultaObras = await supabase
+          .from("documentos")
+          .select("*")
+          .eq("entidade_tipo", "projeto")
+          .in("entidade_id", todasObraIds);
+      }
+
+      // Fornecedores ligados aos lançamentos do mês (despesa fixa, despesa
+      // variável com fornecedor, ou recebimento recorrente): busca o que já
+      // está salvo na pasta Ano/Mês/Boletos-Comprovantes-Recibos-Notas
+      // Fiscais de cada um, como candidatos também.
+      const fornecedorIdsPagar = new Map<string, string[]>();
+      for (const c of pagos) {
+        if (!c.fornecedor_id) continue;
+        fornecedorIdsPagar.set(c.fornecedor_id, [...(fornecedorIdsPagar.get(c.fornecedor_id) ?? []), c.id]);
+      }
+      const fornecedorIdsReceber = new Map<string, string[]>();
+      for (const l of recebidos) {
+        if (!l.fornecedorId) continue;
+        fornecedorIdsReceber.set(l.fornecedorId, [...(fornecedorIdsReceber.get(l.fornecedorId) ?? []), l.id]);
+      }
+      const todosFornecedorIds = Array.from(
+        new Set([...Array.from(fornecedorIdsPagar.keys()), ...Array.from(fornecedorIdsReceber.keys())])
+      );
+      let consultaFornecedores: any = null;
+      if (todosFornecedorIds.length > 0) {
+        consultaFornecedores = await supabase
+          .from("documentos")
+          .select("*")
+          .eq("entidade_tipo", "fornecedor")
+          .in("entidade_id", todosFornecedorIds);
+      }
+
+      if (consultas.length === 0 && !consultaObras && !consultaFornecedores) {
         if (!cancelado) {
-          setAnexosPorLancamento({});
+          setAnexosDiretos({});
+          setCandidatos([]);
           setCarregandoAnexos(false);
         }
         return;
@@ -105,6 +215,7 @@ export function RelatorioMensalViewer({
 
       const mapa: Record<string, AnexoLink[]> = {};
       let falhasAssinatura = 0;
+      let totalAnexos = docs.length;
       await Promise.all(
         docs.map(async (d) => {
           if (!d.lancamento_id) return;
@@ -120,11 +231,62 @@ export function RelatorioMensalViewer({
           }
         })
       );
+
+      // Candidatos das pastas da obra e das pastas de fornecedor
+      // (deduplicados por arquivo).
+      const listaCandidatos: Candidato[] = [];
+      if (consultaObras && !consultaObras.error) {
+        for (const d of (consultaObras.data as Documento[]) ?? []) {
+          if (!daPastaContabil(d.pasta)) continue;
+          const lancamentoIds = [
+            ...(obraIdsPagar.get(d.entidade_id ?? "") ?? []),
+            ...(obraIdsReceber.get(d.entidade_id ?? "") ?? []),
+          ];
+          if (lancamentoIds.length === 0) continue;
+          totalAnexos++;
+          const { data, error } = await supabase.storage.from("anexos").createSignedUrl(d.path, VALIDADE_LINK_SEGUNDOS);
+          if (!data?.signedUrl) falhasAssinatura++;
+          listaCandidatos.push({
+            id: d.id,
+            nome: d.nome,
+            pasta: d.pasta ?? "",
+            url: data?.signedUrl ?? "",
+            origemNome: nomeObra(d.entidade_id ?? ""),
+            lancamentoIds,
+          });
+        }
+      }
+      if (consultaFornecedores && !consultaFornecedores.error) {
+        for (const d of (consultaFornecedores.data as Documento[]) ?? []) {
+          if (!daPastaContabilFornecedor(d.pasta)) continue;
+          const lancamentoIds = [
+            ...(fornecedorIdsPagar.get(d.entidade_id ?? "") ?? []),
+            ...(fornecedorIdsReceber.get(d.entidade_id ?? "") ?? []),
+          ];
+          if (lancamentoIds.length === 0) continue;
+          totalAnexos++;
+          const { data, error } = await supabase.storage.from("anexos").createSignedUrl(d.path, VALIDADE_LINK_SEGUNDOS);
+          if (!data?.signedUrl) falhasAssinatura++;
+          listaCandidatos.push({
+            id: d.id,
+            nome: d.nome,
+            pasta: d.pasta ?? "",
+            url: data?.signedUrl ?? "",
+            origemNome: nomeFornecedor(d.entidade_id ?? ""),
+            lancamentoIds,
+          });
+        }
+      }
+
       if (!cancelado) {
-        setAnexosPorLancamento(mapa);
-        if (falhasAssinatura > 0 && docs.length > 0) {
+        setAnexosDiretos(mapa);
+        setCandidatos(listaCandidatos);
+        // Por padrão, todos os candidatos entram — você desmarca o que não
+        // for desse mês.
+        setSelecionados(new Set(listaCandidatos.map((c) => c.id)));
+        if (falhasAssinatura > 0 && totalAnexos > 0) {
           setErroAnexos(
-            `${falhasAssinatura} de ${docs.length} anexo(s) não geraram link de download. Verifique as políticas de Storage do bucket "anexos" no Supabase.`
+            `${falhasAssinatura} de ${totalAnexos} anexo(s) não geraram link de download. Verifique as políticas de Storage do bucket "anexos" no Supabase.`
           );
         }
         setCarregandoAnexos(false);
@@ -135,24 +297,97 @@ export function RelatorioMensalViewer({
       cancelado = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mes, pagos.length, recebidos.length]);
+  }, [mesInicio, mesFim, baseData, pagos.length, recebidos.length]);
+
+  // Anexos finais mostrados/impressos no relatório: os diretos (sempre
+  // entram) + os candidatos das pastas da obra que estiverem marcados.
+  const anexosPorLancamento = useMemo(() => {
+    const mapa: Record<string, AnexoLink[]> = {};
+    for (const [id, lista] of Object.entries(anexosDiretos)) {
+      mapa[id] = [...lista];
+    }
+    for (const c of candidatos) {
+      if (!selecionados.has(c.id)) continue;
+      const nomeComPasta = `${c.nome} (${c.origemNome} · ${c.pasta})`;
+      for (const lancamentoId of c.lancamentoIds) {
+        if (!mapa[lancamentoId]) mapa[lancamentoId] = [];
+        mapa[lancamentoId].push({ nome: nomeComPasta, url: c.url });
+      }
+    }
+    return mapa;
+  }, [anexosDiretos, candidatos, selecionados]);
+
+  function alternar(id: string) {
+    setSelecionados((prev) => {
+      const novo = new Set(prev);
+      if (novo.has(id)) novo.delete(id);
+      else novo.add(id);
+      return novo;
+    });
+  }
 
   return (
     <div className="fixed inset-0 z-[60] bg-navy/70 backdrop-blur-sm">
       <div className="no-print sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface px-4 py-3">
-        <div className="flex items-center gap-3">
-          <span className="font-semibold text-ink">Relatório mensal — contabilidade</span>
-          <input
-            type="month"
-            value={mes}
-            onChange={(e) => setMes(e.target.value)}
-            className="rounded-lg border border-line bg-canvas px-2.5 py-1.5 text-sm text-ink"
-          />
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="font-semibold text-ink">Relatório — contabilidade</span>
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-ink-faint">De</label>
+            <input
+              type="month"
+              value={mesInicio}
+              onChange={(e) => {
+                const v = e.target.value;
+                setMesInicio(v);
+                if (v > mesFim) setMesFim(v);
+              }}
+              className="rounded-lg border border-line bg-canvas px-2.5 py-1.5 text-sm text-ink"
+            />
+            <label className="text-xs text-ink-faint">até</label>
+            <input
+              type="month"
+              value={mesFim}
+              onChange={(e) => {
+                const v = e.target.value;
+                setMesFim(v);
+                if (v < mesInicio) setMesInicio(v);
+              }}
+              className="rounded-lg border border-line bg-canvas px-2.5 py-1.5 text-sm text-ink"
+            />
+          </div>
+          <div className="flex overflow-hidden rounded-lg border border-line text-xs font-semibold">
+            <button
+              onClick={() => setBaseData("pagamento")}
+              className={`t-colors px-2.5 py-1.5 ${
+                baseData === "pagamento" ? "bg-brand text-white" : "bg-canvas text-ink-soft hover:bg-ink/5"
+              }`}
+              title="Considera a data em que foi pago/recebido"
+            >
+              Pagamento/Recebimento
+            </button>
+            <button
+              onClick={() => setBaseData("vencimento")}
+              className={`t-colors px-2.5 py-1.5 ${
+                baseData === "vencimento" ? "bg-brand text-white" : "bg-canvas text-ink-soft hover:bg-ink/5"
+              }`}
+              title="Considera a data de vencimento, pago ou não"
+            >
+              Vencimento
+            </button>
+          </div>
           {carregandoAnexos && (
             <span className="text-xs text-ink-faint">carregando anexos…</span>
           )}
         </div>
         <div className="flex gap-2">
+          {candidatos.length > 0 && (
+            <button
+              onClick={() => setMostrarSelecao((v) => !v)}
+              className="t-colors rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink-soft hover:bg-ink/5"
+            >
+              {mostrarSelecao ? "Ocultar" : "Selecionar"} anexos ({selecionados.size}/{candidatos.length})
+            </button>
+          )}
           <button
             onClick={() => window.print()}
             disabled={carregandoAnexos}
@@ -175,10 +410,45 @@ export function RelatorioMensalViewer({
         </div>
       )}
 
+      {mostrarSelecao && candidatos.length > 0 && (
+        <div className="no-print max-h-64 overflow-y-auto border-b border-line bg-canvas/60 px-4 py-3">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+              Arquivos encontrados nas pastas das obras e dos fornecedores (Boleto(s) / Notas Fiscais / Recibos / Comprovantes)
+            </p>
+            <div className="flex gap-2 text-xs font-semibold text-brand">
+              <button onClick={() => setSelecionados(new Set(candidatos.map((c) => c.id)))}>
+                Marcar todos
+              </button>
+              <button onClick={() => setSelecionados(new Set())}>Desmarcar todos</button>
+            </div>
+          </div>
+          <div className="space-y-1">
+            {candidatos.map((c) => (
+              <label
+                key={c.id}
+                className="flex items-center gap-2.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm"
+              >
+                <input
+                  type="checkbox"
+                  checked={selecionados.has(c.id)}
+                  onChange={() => alternar(c.id)}
+                  className="h-4 w-4 accent-brand"
+                />
+                <span className="min-w-0 flex-1 truncate text-ink">{c.nome}</span>
+                <span className="flex-shrink-0 text-xs text-ink-faint">
+                  {c.origemNome} · {c.pasta}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="no-print border-b border-line bg-canvas/60 px-4 py-2 text-xs text-ink-faint">
-        A coluna <strong>Anexos</strong> só mostra link quando o lançamento tem arquivo enviado pelo botão{" "}
-        <strong>📎</strong> na lista de Contas a Pagar / Contas a Receber. Um traço (—) significa que ainda não
-        tem nada anexado nesse lançamento.
+        Anexos vêm do lançamento (📎) e das pastas Boleto, Notas Fiscais, Recibos e Comprovantes da obra
+        ou do fornecedor (fixo, variável ou recebimento recorrente) vinculado — use "Selecionar anexos"
+        acima pra escolher quais desses arquivos entram neste relatório.
       </div>
 
       <div
@@ -187,12 +457,16 @@ export function RelatorioMensalViewer({
       >
         <div className="shadow-2xl">
           <RelatorioDoc
-            mes={mes}
+            mesInicio={mesInicio}
+            mesFim={mesFim}
+            periodoLabel={periodoLabel}
+            baseData={baseData}
             pagos={pagos}
             recebidos={recebidos}
             proLabore={proLabore}
             nomeFornecedor={nomeFornecedor}
             anexosPorLancamento={anexosPorLancamento}
+            configuracoes={configuracoes}
           />
         </div>
       </div>
@@ -201,23 +475,31 @@ export function RelatorioMensalViewer({
 }
 
 function RelatorioDoc({
-  mes,
+  mesInicio,
+  mesFim,
+  periodoLabel,
+  baseData,
   pagos,
   recebidos,
   proLabore,
   nomeFornecedor,
   anexosPorLancamento,
+  configuracoes,
 }: {
-  mes: string;
+  mesInicio: string;
+  mesFim: string;
+  periodoLabel: string;
+  baseData: BaseData;
   pagos: ContaPagar[];
   recebidos: LinhaReceber[];
   proLabore: ProLabore[];
   nomeFornecedor: (id: string | null) => string;
   anexosPorLancamento: Record<string, AnexoLink[]>;
+  configuracoes?: Configuracoes | null;
 }) {
   const proLaboreMes = useMemo(
-    () => proLabore.filter((p) => p.mes_referencia === mes),
-    [proLabore, mes]
+    () => proLabore.filter((p) => p.mes_referencia >= mesInicio && p.mes_referencia <= mesFim),
+    [proLabore, mesInicio, mesFim]
   );
 
   const totalPago = pagos.reduce((s, c) => s + Number(c.valor), 0);
@@ -252,24 +534,28 @@ function RelatorioDoc({
       <div style={{ padding: "24px 28px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
           <div>
-            <p style={{ margin: 0, fontWeight: 800, fontSize: 15 }}>{RAZAO_SOCIAL}</p>
-            <p style={{ margin: "2px 0 0", fontSize: 11, color: MUTED }}>CNPJ {CNPJ}</p>
+            <p style={{ margin: 0, fontWeight: 800, fontSize: 15 }}>{configuracoes?.razao_social || RAZAO_SOCIAL}</p>
+            <p style={{ margin: "2px 0 0", fontSize: 11, color: MUTED }}>CNPJ {configuracoes?.cnpj || CNPJ}</p>
           </div>
           <div style={{ textAlign: "right" }}>
             <p style={{ margin: 0, fontSize: 11, color: MUTED }}>Período de referência</p>
-            <p style={{ margin: "2px 0 0", fontWeight: 700, fontSize: 13 }}>{labelMesReferencia(mes)}</p>
+            <p style={{ margin: "2px 0 0", fontWeight: 700, fontSize: 13 }}>{periodoLabel}</p>
           </div>
         </div>
 
-        <Secao titulo="Contas a Pagar (pagas no período)">
+        <Secao titulo={`Contas a Pagar (${baseData === "vencimento" ? "vencidas" : "pagas"} no período)`}>
           {pagos.length === 0 ? (
-            <VazioLinha texto="Nenhuma conta paga neste período." />
+            <VazioLinha texto="Nenhuma conta neste período." />
           ) : (
             <TabelaLancamentos
-              colunas={["Descrição", "Fornecedor", "Pago em", "Anexos", "Valor"]}
+              colunas={["Descrição", "Fornecedor", baseData === "vencimento" ? "Vencimento" : "Pago em", "Anexos", "Valor"]}
               linhas={pagos.map((c) => ({
                 id: c.id,
-                celulas: [c.descricao, nomeFornecedor(c.fornecedor_id), formatDate(c.data_pagamento)],
+                celulas: [
+                  c.descricao,
+                  nomeFornecedor(c.fornecedor_id),
+                  formatDate(baseData === "vencimento" ? c.vencimento : c.data_pagamento),
+                ],
                 valor: brl(Number(c.valor)),
               }))}
               anexosPorLancamento={anexosPorLancamento}
@@ -278,15 +564,15 @@ function RelatorioDoc({
           <Subtotal label="Subtotal pago" valor={totalPago} />
         </Secao>
 
-        <Secao titulo="Contas a Receber (recebidas no período)">
+        <Secao titulo={`Contas a Receber (${baseData === "vencimento" ? "vencidas" : "recebidas"} no período)`}>
           {recebidos.length === 0 ? (
-            <VazioLinha texto="Nenhuma conta recebida neste período." />
+            <VazioLinha texto="Nenhuma conta neste período." />
           ) : (
             <TabelaLancamentos
-              colunas={["Cliente", "Origem", "Recebido em", "Anexos", "Valor"]}
+              colunas={["Cliente", "Origem", baseData === "vencimento" ? "Vencimento" : "Recebido em", "Anexos", "Valor"]}
               linhas={recebidos.map((l) => ({
                 id: l.id,
-                celulas: [l.titulo, l.subtitulo, formatDate(l.dataRecebimento)],
+                celulas: [l.titulo, l.subtitulo, formatDate(baseData === "vencimento" ? l.vencimento : l.dataRecebimento)],
                 valor: brl(l.valor),
               }))}
               anexosPorLancamento={anexosPorLancamento}

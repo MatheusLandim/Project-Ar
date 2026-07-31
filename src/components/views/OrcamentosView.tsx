@@ -161,7 +161,7 @@ export function OrcamentosView({
                     onClick={() => onConvert(o)}
                     className="t-colors rounded-lg border border-brand/40 px-3 py-1.5 text-sm font-medium text-brand hover:bg-brand-soft"
                   >
-                    Converter em obra
+                    Aprovar projeto
                   </button>
                 )}
                 <div className="ml-auto">

@@ -3,7 +3,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Projeto, Cliente, Orcamento, totalOrcamento, pagamentoStatus } from "@/lib/types";
+import {
+  Projeto,
+  Cliente,
+  Orcamento,
+  ContaPagar,
+  ContaReceber,
+  PessoaCliente,
+  Configuracoes,
+  Perfil,
+  totalOrcamento,
+  pagamentoStatus,
+} from "@/lib/types";
 import { Logo } from "@/components/Logo";
 import { Sidebar, View } from "@/components/Sidebar";
 import { ProjectForm, ProjetoInput } from "@/components/ProjectForm";
@@ -11,19 +22,18 @@ import { ClienteForm, ClienteInput } from "@/components/ClienteForm";
 import { OrcamentoForm, OrcamentoInput } from "@/components/OrcamentoForm";
 import { OrcamentoViewer } from "@/components/OrcamentoViewer";
 import { OverviewView } from "@/components/views/OverviewView";
-import { ObrasView } from "@/components/views/ObrasView";
 import { ClientesView } from "@/components/views/ClientesView";
 import { OrcamentosView } from "@/components/views/OrcamentosView";
 import { RtView } from "@/components/views/RtView";
 import { DocumentosView } from "@/components/views/DocumentosView";
 import { FinanceiroView } from "@/components/views/FinanceiroView";
 import { FornecedoresView } from "@/components/views/FornecedoresView";
+import { ConfiguracoesView, aplicarPaleta } from "@/components/views/ConfiguracoesView";
 
 const TITULOS: Record<View, { t: string; s: string }> = {
   overview: { t: "Visão geral", s: "Resumo de contratos, recebimentos e alertas." },
-  obras: { t: "Obras", s: "Seus projetos e contratos." },
-  clientes: { t: "Clientes", s: "Ficha de cada cliente e o que já contratou." },
-  orcamentos: { t: "Orçamentos", s: "Crie propostas, gere o PDF e converta em obra." },
+  clientes: { t: "Obras / Clientes", s: "Cada obra, seu status, sua pasta e o que já contratou." },
+  orcamentos: { t: "Orçamentos", s: "Crie propostas, gere o PDF e aprove o projeto." },
   rt: { t: "RT / ART", s: "Taxas de responsabilidade técnica que você paga." },
   documentos: { t: "Documentos", s: "Notas fiscais e boletos anexados." },
   financeiro: {
@@ -34,15 +44,24 @@ const TITULOS: Record<View, { t: string; s: string }> = {
     t: "Fornecedores",
     s: "Cadastro de fornecedores e a pasta de documentos de cada um.",
   },
+  configuracoes: {
+    t: "Configurações",
+    s: "Aparência, dados da empresa e permissões de acesso.",
+  },
 };
 
-export default function DashboardClient({ userEmail }: { userEmail: string }) {
+export default function DashboardClient({ userEmail, userId }: { userEmail: string; userId: string }) {
   const router = useRouter();
   const supabase = createClient();
 
   const [projetos, setProjetos] = useState<Projeto[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [orcamentos, setOrcamentos] = useState<Orcamento[]>([]);
+  const [contasPagar, setContasPagar] = useState<ContaPagar[]>([]);
+  const [contasReceber, setContasReceber] = useState<ContaReceber[]>([]);
+  const [pessoasCliente, setPessoasCliente] = useState<PessoaCliente[]>([]);
+  const [configuracoes, setConfiguracoes] = useState<Configuracoes | null>(null);
+  const [perfis, setPerfis] = useState<Perfil[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -51,6 +70,7 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Projeto | undefined>(undefined);
   const [showClienteForm, setShowClienteForm] = useState(false);
+  const [obraParaAbrir, setObraParaAbrir] = useState<string | null>(null);
   const [editingCliente, setEditingCliente] = useState<Cliente | undefined>(
     undefined
   );
@@ -59,13 +79,18 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
   const [viewingOrc, setViewingOrc] = useState<Orcamento | undefined>(undefined);
 
   const load = useCallback(async () => {
-    const [proj, cli, orc] = await Promise.all([
+    const [proj, cli, orc, cp, cr, pes, conf, prf] = await Promise.all([
       supabase
         .from("projetos")
         .select("*, pagamentos(*), anexos(*)")
         .order("criado_em", { ascending: false }),
       supabase.from("clientes").select("*").order("nome"),
       supabase.from("orcamentos").select("*").order("criado_em", { ascending: false }),
+      supabase.from("contas_pagar").select("*").order("vencimento"),
+      supabase.from("contas_receber").select("*").order("vencimento"),
+      supabase.from("pessoas_cliente").select("*").order("nome"),
+      supabase.from("configuracoes").select("*").eq("id", 1).maybeSingle(),
+      supabase.from("perfis").select("*").order("criado_em", { ascending: false }),
     ]);
     if (proj.error) setErro(proj.error.message);
     else {
@@ -74,6 +99,11 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
     }
     if (!cli.error) setClientes((cli.data as Cliente[]) ?? []);
     if (!orc.error) setOrcamentos((orc.data as Orcamento[]) ?? []);
+    if (!cp.error) setContasPagar((cp.data as ContaPagar[]) ?? []);
+    if (!cr.error) setContasReceber((cr.data as ContaReceber[]) ?? []);
+    if (!pes.error) setPessoasCliente((pes.data as PessoaCliente[]) ?? []);
+    if (!conf.error) setConfiguracoes((conf.data as Configuracoes) ?? null);
+    if (!prf.error) setPerfis((prf.data as Perfil[]) ?? []);
     setLoading(false);
   }, [supabase]);
 
@@ -87,13 +117,13 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
       const saved = localStorage.getItem("projectar_view");
       const validas: View[] = [
         "overview",
-        "obras",
         "clientes",
         "orcamentos",
         "rt",
         "documentos",
         "financeiro",
         "fornecedores",
+        "configuracoes",
       ];
       if (saved && validas.includes(saved as View)) setView(saved as View);
     } catch {}
@@ -104,6 +134,28 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
       localStorage.setItem("projectar_view", view);
     } catch {}
   }, [view]);
+
+  // Meu perfil (permissões). Sem linha em "perfis" = acesso total, do
+  // jeito que sempre foi antes dessa função existir.
+  const meuPerfil = perfis.find((p) => p.user_id === userId) ?? null;
+  const souAdmin = !meuPerfil || meuPerfil.is_admin;
+  const allowedItems: View[] | null =
+    souAdmin || !meuPerfil ? null : ([...meuPerfil.areas, "configuracoes"] as View[]);
+
+  // Aplica a cor do site assim que as configurações chegam (e de novo
+  // quando o tema claro/escuro muda, pra pegar o par de cores certo).
+  useEffect(() => {
+    if (configuracoes) aplicarPaleta(configuracoes.paleta_cor);
+  }, [configuracoes]);
+
+  // Se a pessoa está numa aba que não é mais permitida (ex.: um admin
+  // tirou o acesso dela), manda pra primeira aba que ela pode ver.
+  useEffect(() => {
+    if (allowedItems && !allowedItems.includes(view)) {
+      setView(allowedItems[0] ?? "configuracoes");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meuPerfil]);
 
   // Garante que o cliente exista no cadastro (cria se for novo) e devolve o id
   async function resolverClienteId(nome: string): Promise<string | null> {
@@ -136,10 +188,34 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
     }
   }
 
+  async function atualizarObra(id: string, campos: Record<string, unknown>) {
+    const { error } = await supabase.from("projetos").update(campos).eq("id", id);
+    if (error) return error.message;
+    await load();
+    return null;
+  }
+
   async function salvarCliente(input: ClienteInput) {
-    if (editingCliente)
-      await supabase.from("clientes").update(input).eq("id", editingCliente.id);
-    else await supabase.from("clientes").insert(input);
+    const { pessoas, ...clienteData } = input;
+    let clienteId = editingCliente?.id ?? null;
+    if (editingCliente) {
+      await supabase.from("clientes").update(clienteData).eq("id", editingCliente.id);
+    } else {
+      const { data } = await supabase
+        .from("clientes")
+        .insert(clienteData)
+        .select("id")
+        .single();
+      clienteId = data?.id ?? null;
+    }
+    if (clienteId) {
+      await supabase.from("pessoas_cliente").delete().eq("cliente_id", clienteId);
+      if (pessoas.length > 0) {
+        await supabase.from("pessoas_cliente").insert(
+          pessoas.map((p) => ({ ...p, cliente_id: clienteId }))
+        );
+      }
+    }
     setShowClienteForm(false);
     setEditingCliente(undefined);
     await load();
@@ -187,7 +263,8 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
         .update({ obra_id: data.id, status: "Aprovado" })
         .eq("id", o.id);
     await load();
-    setView("obras");
+    setView("clientes");
+    if (data?.id) setObraParaAbrir(data.id);
   }
 
   function novoOrcamento() {
@@ -233,8 +310,8 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
         if (pagamentoStatus(pg) === "atrasado") atras++;
     const rt = projetos.filter(
       (p) =>
-        (Number(p.rt_percentual) > 0 && !p.rt_pago) ||
-        (Number(p.art_valor) > 0 && !p.art_pago)
+        (p.tem_rt && !p.rt_pago) ||
+        (p.tem_art && !p.art_pago)
     ).length;
     return { financeiro: atras || undefined, rt: rt || undefined };
   }, [projetos]);
@@ -250,6 +327,7 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
         onNew={novaObra}
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        allowedItems={allowedItems}
       />
 
       {/* Topo mobile */}
@@ -287,21 +365,24 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
           ) : erro ? (
             <ErrorBox msg={erro} />
           ) : view === "overview" ? (
-            <OverviewView projetos={projetos} onNavigate={irPara} />
-          ) : view === "obras" ? (
-            <ObrasView
+            <OverviewView
               projetos={projetos}
-              reload={load}
-              onNew={novaObra}
-              onEdit={editarObra}
+              contasPagar={contasPagar}
+              contasReceber={contasReceber}
+              onNavigate={irPara}
             />
           ) : view === "clientes" ? (
             <ClientesView
               clientes={clientes}
               projetos={projetos}
+              pessoasCliente={pessoasCliente}
               onNew={novoCliente}
+              onNovaObra={novaObra}
               onEdit={editarCliente}
               onDelete={excluirCliente}
+              onAtualizarObra={atualizarObra}
+              obraParaAbrir={obraParaAbrir}
+              onObraAberta={() => setObraParaAbrir(null)}
             />
           ) : view === "orcamentos" ? (
             <OrcamentosView
@@ -316,11 +397,20 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
           ) : view === "rt" ? (
             <RtView projetos={projetos} reload={load} />
           ) : view === "documentos" ? (
-            <DocumentosView projetos={projetos} reload={load} />
+            <DocumentosView />
           ) : view === "fornecedores" ? (
             <FornecedoresView />
+          ) : view === "configuracoes" ? (
+            configuracoes && (
+              <ConfiguracoesView
+                configuracoes={configuracoes}
+                perfis={perfis}
+                souAdmin={souAdmin}
+                reload={load}
+              />
+            )
           ) : (
-            <FinanceiroView clientes={clientes} projetos={projetos} reloadProjetos={load} />
+            <FinanceiroView clientes={clientes} projetos={projetos} reloadProjetos={load} configuracoes={configuracoes} />
           )}
         </div>
       </main>
@@ -340,6 +430,11 @@ export default function DashboardClient({ userEmail }: { userEmail: string }) {
       {showClienteForm && (
         <ClienteForm
           initial={editingCliente}
+          initialPessoas={
+            editingCliente
+              ? pessoasCliente.filter((p) => p.cliente_id === editingCliente.id)
+              : undefined
+          }
           onCancel={() => {
             setShowClienteForm(false);
             setEditingCliente(undefined);

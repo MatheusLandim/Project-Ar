@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Documento, EntidadeTipo, LancamentoTipo, PASTAS_ENTIDADE, iconePasta } from "@/lib/types";
+import { Documento, EntidadeTipo, LancamentoTipo, PASTAS_ENTIDADE, PASTAS_MES, iconePasta } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 
 function tamanhoLegivel(bytes: number | null) {
@@ -17,6 +17,7 @@ export function AnexosLancamento({
   lancamentoId,
   entidadeTipo,
   entidadeId,
+  pastaFixa,
   titulo,
   onClose,
 }: {
@@ -24,6 +25,7 @@ export function AnexosLancamento({
   lancamentoId: string;
   entidadeTipo?: EntidadeTipo | null;
   entidadeId?: string | null;
+  pastaFixa?: string | null;
   titulo: string;
   onClose: () => void;
 }) {
@@ -32,6 +34,7 @@ export function AnexosLancamento({
   const [docs, setDocs] = useState<Documento[]>([]);
   const [loading, setLoading] = useState(true);
   const [pasta, setPasta] = useState("Comprovantes");
+  const [tipoDoc, setTipoDoc] = useState(PASTAS_MES[0]);
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -72,7 +75,7 @@ export function AnexosLancamento({
         entidade_id: entidadeId ?? null,
         lancamento_tipo: lancamentoTipo,
         lancamento_id: lancamentoId,
-        pasta: pasta.trim() || "Outros",
+        pasta: pastaFixa ? `${pastaFixa}/${tipoDoc}` : pasta.trim() || "Outros",
         nome: file.name,
         path,
         tamanho: file.size,
@@ -169,15 +172,32 @@ export function AnexosLancamento({
         <div className="border-t border-line px-6 py-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Enviar arquivo</p>
           <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={pasta}
-              onChange={(e) => setPasta(e.target.value)}
-              className="t-colors rounded-lg border border-line bg-surface px-2.5 py-2 text-sm text-ink"
-            >
-              {PASTAS_ENTIDADE.map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
+            {pastaFixa ? (
+              <>
+                <span className="t-colors rounded-lg border border-line bg-brand-soft px-2.5 py-2 text-sm font-medium text-brand-dark">
+                  📁 {pastaFixa}/
+                </span>
+                <select
+                  value={tipoDoc}
+                  onChange={(e) => setTipoDoc(e.target.value)}
+                  className="t-colors rounded-lg border border-line bg-surface px-2.5 py-2 text-sm text-ink"
+                >
+                  {PASTAS_MES.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </>
+            ) : (
+              <select
+                value={pasta}
+                onChange={(e) => setPasta(e.target.value)}
+                className="t-colors rounded-lg border border-line bg-surface px-2.5 py-2 text-sm text-ink"
+              >
+                {PASTAS_ENTIDADE.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            )}
             <input
               ref={inputRef}
               type="file"
@@ -198,7 +218,9 @@ export function AnexosLancamento({
           </div>
           {entidadeId && (
             <p className="mt-2 text-[11px] text-ink-faint">
-              Também aparece na pasta geral do {entidadeTipo === "cliente" ? "cliente" : "fornecedor"}.
+              {entidadeTipo === "despesa_fixa"
+                ? "Vai direto para a pasta dessa despesa fixa, organizada por ano e mês."
+                : `Também aparece na pasta geral do ${entidadeTipo === "cliente" ? "cliente" : "fornecedor"}.`}
             </p>
           )}
         </div>

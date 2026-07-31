@@ -34,16 +34,16 @@ export function AnexosManager({
       if (!map.has(p)) map.set(p, []);
       map.get(p)!.push(a);
     }
-    for (const arr of map.values())
-      arr.sort((a, b) => b.criado_em.localeCompare(a.criado_em));
-    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    for (const arr of Array.from(map.values()))
+      arr.sort((a: (typeof projeto.anexos)[number], b: (typeof projeto.anexos)[number]) => b.criado_em.localeCompare(a.criado_em));
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [projeto.anexos]);
 
   // Sugestões de pasta = padrão + as que já existem na obra
   const sugestoes = useMemo(() => {
     const set = new Set(PASTAS_SUGERIDAS);
     grupos.forEach(([p]) => set.add(p));
-    return [...set];
+    return Array.from(set);
   }, [grupos]);
 
   async function enviar(file: File) {

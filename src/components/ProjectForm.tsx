@@ -10,10 +10,13 @@ export type ProjetoInput = {
   tipo: string;
   endereco: string | null;
   engenharia: string | null;
+  tem_rt: boolean;
   rt_percentual: number;
+  tem_art: boolean;
   art_valor: number;
   rt_obs: string | null;
   art_obs: string | null;
+  com_imposto: boolean;
   valor_total: number;
   status: string;
   data_inicio: string | null;
@@ -37,14 +40,17 @@ export function ProjectForm({
   const [tipo, setTipo] = useState(initial?.tipo ?? "");
   const [endereco, setEndereco] = useState(initial?.endereco ?? "");
   const [engenharia, setEngenharia] = useState(initial?.engenharia ?? "");
+  const [temRt, setTemRt] = useState(initial ? initial.tem_rt : true);
   const [rt, setRt] = useState(
     initial?.rt_percentual ? String(initial.rt_percentual) : ""
   );
+  const [temArt, setTemArt] = useState(initial ? initial.tem_art : true);
   const [art, setArt] = useState(
     initial?.art_valor ? String(initial.art_valor) : ""
   );
   const [rtObs, setRtObs] = useState(initial?.rt_obs ?? "");
   const [artObs, setArtObs] = useState(initial?.art_obs ?? "");
+  const [comImposto, setComImposto] = useState(initial ? initial.com_imposto : true);
   const [valor, setValor] = useState(
     initial ? String(initial.valor_total) : ""
   );
@@ -69,10 +75,13 @@ export function ProjectForm({
       tipo: tipo.trim() || "",
       endereco: endereco.trim() || null,
       engenharia: engenharia.trim() || null,
-      rt_percentual: Number(rt) || 0,
-      art_valor: Number(art) || 0,
-      rt_obs: rtObs.trim() || null,
-      art_obs: artObs.trim() || null,
+      tem_rt: temRt,
+      rt_percentual: temRt ? Number(rt) || 0 : 0,
+      tem_art: temArt,
+      art_valor: temArt ? Number(art) || 0 : 0,
+      rt_obs: temRt ? rtObs.trim() || null : null,
+      art_obs: temArt ? artObs.trim() || null : null,
+      com_imposto: comImposto,
       valor_total: Number(valor) || 0,
       status,
       data_inicio: inicio || null,
@@ -167,71 +176,131 @@ export function ProjectForm({
 
           <Section title="Financeiro">
             <div className="grid grid-cols-1 gap-4">
-              <Field label="Valor total do contrato (R$)" required>
-                <input
-                  required
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={valor}
-                  onChange={(e) => setValor(e.target.value)}
-                  className={`${input} tnum`}
-                  placeholder="0,00"
-                />
-              </Field>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="RT — Responsabilidade Técnica (%)">
+                <Field label="Valor total do contrato (R$)" required>
                   <input
+                    required
                     type="number"
                     step="0.01"
                     min="0"
-                    max="100"
-                    value={rt}
-                    onChange={(e) => setRt(e.target.value)}
+                    value={valor}
+                    onChange={(e) => setValor(e.target.value)}
                     className={`${input} tnum`}
-                    placeholder="Ex.: 10"
+                    placeholder="0,00"
                   />
                 </Field>
-                <Field label="ART — valor cobrado pelo engenheiro (R$)">
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={art}
-                    onChange={(e) => setArt(e.target.value)}
-                    className={`${input} tnum`}
-                    placeholder="Ex.: 350,00"
-                  />
+                <Field label="Imposto">
+                  <div className="space-y-2">
+                    <label
+                      className={`t-colors flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2.5 ${
+                        comImposto ? "border-brand bg-brand-soft" : "border-line hover:bg-ink/5"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="imposto"
+                        checked={comImposto}
+                        onChange={() => setComImposto(true)}
+                        className="h-4 w-4 accent-brand"
+                      />
+                      <span className={`text-sm font-semibold ${comImposto ? "text-brand-dark" : "text-ink-soft"}`}>
+                        Imposto incluído (NF)
+                      </span>
+                    </label>
+                    <label
+                      className={`t-colors flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2.5 ${
+                        !comImposto ? "border-brand bg-brand-soft" : "border-line hover:bg-ink/5"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="imposto"
+                        checked={!comImposto}
+                        onChange={() => setComImposto(false)}
+                        className="h-4 w-4 accent-brand"
+                      />
+                      <span className={`text-sm font-semibold ${!comImposto ? "text-brand-dark" : "text-ink-soft"}`}>
+                        Sem imposto (Recibo)
+                      </span>
+                    </label>
+                  </div>
                 </Field>
               </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="Essa obra tem RT?">
+                  <ToggleSimNao value={temRt} onChange={setTemRt} />
+                </Field>
+                <Field label="Essa obra tem ART?">
+                  <ToggleSimNao value={temArt} onChange={setTemArt} />
+                </Field>
+              </div>
+
+              {(temRt || temArt) && (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {temRt && (
+                    <Field label="RT — Responsabilidade Técnica (%)">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max="100"
+                        value={rt}
+                        onChange={(e) => setRt(e.target.value)}
+                        className={`${input} tnum`}
+                        placeholder="Ex.: 10"
+                      />
+                    </Field>
+                  )}
+                  {temArt && (
+                    <Field label="ART — valor cobrado pelo engenheiro (R$)">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={art}
+                        onChange={(e) => setArt(e.target.value)}
+                        className={`${input} tnum`}
+                        placeholder="Ex.: 350,00"
+                      />
+                    </Field>
+                  )}
+                </div>
+              )}
             </div>
-            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="RT — a quem pagar / dados (PIX, banco)">
-                <input
-                  value={rtObs ?? ""}
-                  onChange={(e) => setRtObs(e.target.value)}
-                  className={input}
-                  placeholder="Ex.: CREA-SP · PIX 12.345.678/0001-90"
-                />
-              </Field>
-              <Field label="ART — a quem pagar / dados (PIX, banco)">
-                <input
-                  value={artObs ?? ""}
-                  onChange={(e) => setArtObs(e.target.value)}
-                  className={input}
-                  placeholder="Ex.: Eng. João · PIX joao@email.com"
-                />
-              </Field>
-            </div>
-            {((Number(rt) > 0 && Number(valor) > 0) || Number(art) > 0) && (
+            {(temRt || temArt) && (
+              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {temRt && (
+                  <Field label="RT — a quem pagar / dados (PIX, banco)">
+                    <input
+                      value={rtObs ?? ""}
+                      onChange={(e) => setRtObs(e.target.value)}
+                      className={input}
+                      placeholder="Ex.: CREA-SP · PIX 12.345.678/0001-90"
+                    />
+                  </Field>
+                )}
+                {temArt && (
+                  <Field label="ART — a quem pagar / dados (PIX, banco)">
+                    <input
+                      value={artObs ?? ""}
+                      onChange={(e) => setArtObs(e.target.value)}
+                      className={input}
+                      placeholder="Ex.: Eng. João · PIX joao@email.com"
+                    />
+                  </Field>
+                )}
+              </div>
+            )}
+            {((temRt && Number(rt) > 0 && Number(valor) > 0) || (temArt && Number(art) > 0)) && (
               <div className="mt-2 space-y-1.5">
-                {Number(rt) > 0 && Number(valor) > 0 && (
+                {temRt && Number(rt) > 0 && Number(valor) > 0 && (
                   <p className="rounded-lg bg-brand-soft px-3 py-2 text-sm text-brand-dark">
                     RT a pagar ({rt}%):{" "}
                     <strong className="tnum">{brl(rtValor)}</strong>
                   </p>
                 )}
-                {Number(art) > 0 && (
+                {temArt && Number(art) > 0 && (
                   <p className="rounded-lg bg-brand-soft px-3 py-2 text-sm text-brand-dark">
                     ART a pagar:{" "}
                     <strong className="tnum">{brl(artValorCalc)}</strong>
@@ -344,6 +413,41 @@ function Section({
         {title}
       </p>
       {children}
+    </div>
+  );
+}
+
+function ToggleSimNao({
+  value,
+  onChange,
+}: {
+  value: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex gap-2">
+      <button
+        type="button"
+        onClick={() => onChange(true)}
+        className={`t-colors flex-1 rounded-lg border px-3 py-2.5 text-sm font-semibold ${
+          value
+            ? "border-brand bg-brand-soft text-brand-dark"
+            : "border-line text-ink-soft hover:bg-ink/5"
+        }`}
+      >
+        Sim
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange(false)}
+        className={`t-colors flex-1 rounded-lg border px-3 py-2.5 text-sm font-semibold ${
+          !value
+            ? "border-brand bg-brand-soft text-brand-dark"
+            : "border-line text-ink-soft hover:bg-ink/5"
+        }`}
+      >
+        Não
+      </button>
     </div>
   );
 }

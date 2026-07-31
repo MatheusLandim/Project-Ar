@@ -1,8 +1,9 @@
 const PROJ: Record<string, string> = {
   Proposta: "bg-slate-400/15 text-slate-500 ring-slate-400/30",
   Aprovado: "bg-sky-500/15 text-sky-500 ring-sky-500/30",
-  "Em execução": "bg-brand/15 text-brand ring-brand/30",
-  Concluído: "bg-emerald-500/15 text-emerald-500 ring-emerald-500/30",
+  "Em execução (projeto preliminar)": "bg-brand/15 text-brand ring-brand/30",
+  "Em revisão": "bg-amber-500/15 text-amber-500 ring-amber-500/30",
+  "Concluído (projeto executivo)": "bg-emerald-500/15 text-emerald-500 ring-emerald-500/30",
   Cancelado: "bg-rose-500/15 text-rose-500 ring-rose-500/30",
 };
 

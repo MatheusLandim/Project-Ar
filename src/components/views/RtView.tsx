@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Projeto, rtValor, artValor } from "@/lib/types";
 import { brl, formatDate, hoje } from "@/lib/format";
+import { ContextMenu, MenuContextoState, useFecharMenuAoClicarFora, BotaoMenu } from "@/components/ContextMenu";
 
 type Linha = {
   key: string;
@@ -31,11 +32,14 @@ export function RtView({
 }) {
   const supabase = createClient();
   const [filtro, setFiltro] = useState("todos");
+  const [menu, setMenu] = useState<MenuContextoState | null>(null);
+  const [detalhe, setDetalhe] = useState<Linha | null>(null);
+  useFecharMenuAoClicarFora(!!menu, () => setMenu(null));
 
   const linhas = useMemo<Linha[]>(() => {
     const all: Linha[] = [];
     for (const p of projetos) {
-      if (Number(p.rt_percentual) > 0) {
+      if (p.tem_rt && Number(p.rt_percentual) > 0) {
         all.push({
           key: p.id + "-rt",
           projeto: p,
@@ -47,7 +51,7 @@ export function RtView({
           obs: p.rt_obs,
         });
       }
-      if (Number(p.art_valor) > 0) {
+      if (p.tem_art && Number(p.art_valor) > 0) {
         all.push({
           key: p.id + "-art",
           projeto: p,
@@ -142,6 +146,17 @@ export function RtView({
           visiveis.map((l) => (
             <div
               key={l.key}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setMenu({
+                  x: e.clientX,
+                  y: e.clientY,
+                  opcoes: [
+                    { label: "Ver detalhes", onClick: () => setDetalhe(l) },
+                    { label: l.pago ? "Reabrir" : "Marcar pago", onClick: () => toggle(l) },
+                  ],
+                });
+              }}
               className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-line glass px-4 py-3.5 sm:px-5"
             >
               <span
@@ -184,10 +199,118 @@ export function RtView({
               >
                 {l.pago ? "Reabrir" : "Marcar pago"}
               </button>
+              <BotaoMenu
+                onAbrir={(pos) =>
+                  setMenu({
+                    ...pos,
+                    opcoes: [
+                      { label: "Ver detalhes", onClick: () => setDetalhe(l) },
+                      { label: l.pago ? "Reabrir" : "Marcar pago", onClick: () => toggle(l) },
+                    ],
+                  })
+                }
+              />
             </div>
           ))
         )}
       </div>
+
+      {menu && <ContextMenu menu={menu} onFechar={() => setMenu(null)} />}
+
+      {detalhe && (
+        <div
+          className="fixed inset-0 z-[70] grid place-items-center bg-navy/60 p-4 backdrop-blur-sm"
+          onClick={() => setDetalhe(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-2xl glass-strong p-5 shadow-card sm:p-6"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <span
+                  className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold ring-1 ring-inset ${
+                    detalhe.tipo === "RT"
+                      ? "bg-brand/10 text-brand ring-brand/25"
+                      : "bg-sky-500/10 text-sky-500 ring-sky-500/25"
+                  }`}
+                >
+                  {detalhe.tipo}
+                </span>
+                <h2 className="mt-1.5 font-display text-lg font-bold text-ink">
+                  {detalhe.projeto.cliente}
+                </h2>
+                <p className="text-sm text-ink-soft">{detalhe.projeto.projeto}</p>
+              </div>
+              <button
+                onClick={() => setDetalhe(null)}
+                className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg text-ink-faint hover:bg-ink/5"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-2.5 text-sm">
+              {detalhe.projeto.endereco && (
+                <p className="flex justify-between gap-3">
+                  <span className="text-ink-faint">Endereço</span>
+                  <span className="text-right font-medium text-ink">{detalhe.projeto.endereco}</span>
+                </p>
+              )}
+              <p className="flex justify-between gap-3">
+                <span className="text-ink-faint">Status da obra</span>
+                <span className="font-medium text-ink">{detalhe.projeto.status}</span>
+              </p>
+              <p className="flex justify-between gap-3">
+                <span className="text-ink-faint">Valor do contrato</span>
+                <span className="tnum font-medium text-ink">{brl(Number(detalhe.projeto.valor_total))}</span>
+              </p>
+              {detalhe.tipo === "RT" && (
+                <p className="flex justify-between gap-3">
+                  <span className="text-ink-faint">Percentual de RT</span>
+                  <span className="tnum font-medium text-ink">{detalhe.pct}%</span>
+                </p>
+              )}
+              <p className="flex justify-between gap-3">
+                <span className="text-ink-faint">Valor {detalhe.tipo}</span>
+                <span className="tnum font-bold text-ink">{brl(detalhe.valor)}</span>
+              </p>
+              <p className="flex justify-between gap-3">
+                <span className="text-ink-faint">Status do pagamento</span>
+                <span className={`font-semibold ${detalhe.pago ? "text-emerald-500" : "text-amber-500"}`}>
+                  {detalhe.pago ? "Pago" : "Pendente"}
+                </span>
+              </p>
+              {detalhe.pago && detalhe.data && (
+                <p className="flex justify-between gap-3">
+                  <span className="text-ink-faint">Pago em</span>
+                  <span className="font-medium text-ink">{formatDate(detalhe.data)}</span>
+                </p>
+              )}
+              {detalhe.obs && (
+                <p className="flex justify-between gap-3">
+                  <span className="text-ink-faint">Pagar a</span>
+                  <span className="text-right font-medium text-ink">{detalhe.obs}</span>
+                </p>
+              )}
+            </div>
+
+            <button
+              onClick={() => {
+                toggle(detalhe);
+                setDetalhe(null);
+              }}
+              className={`t-colors mt-5 w-full rounded-lg px-4 py-2.5 text-sm font-semibold ${
+                detalhe.pago
+                  ? "border border-line text-ink-soft hover:bg-ink/5"
+                  : "bg-emerald-600 text-white hover:bg-emerald-700"
+              }`}
+            >
+              {detalhe.pago ? "Reabrir" : "Marcar como pago"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

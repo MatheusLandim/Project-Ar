@@ -76,6 +76,16 @@ export type Cliente = {
   criado_em: string;
 };
 
+export type PessoaCliente = {
+  id: string;
+  cliente_id: string;
+  nome: string;
+  telefone: string | null;
+  email: string | null;
+  data_nascimento: string | null;
+  criado_em: string;
+};
+
 export type Projeto = {
   id: string;
   cliente: string;
@@ -84,15 +94,18 @@ export type Projeto = {
   tipo: string | null;
   endereco: string | null;
   engenharia: string | null;
+  tem_rt: boolean;
   rt_percentual: number | null;
   rt_pago: boolean | null;
   rt_data_pagamento: string | null;
   rt_obs: string | null;
+  tem_art: boolean;
   art_percentual: number | null;
   art_valor: number | null;
   art_pago: boolean | null;
   art_data_pagamento: string | null;
   art_obs: string | null;
+  com_imposto: boolean;
   valor_total: number;
   status: string;
   data_inicio: string | null;
@@ -106,8 +119,9 @@ export type Projeto = {
 export const STATUS_PROJETO = [
   "Proposta",
   "Aprovado",
-  "Em execução",
-  "Concluído",
+  "Em execução (projeto preliminar)",
+  "Em revisão",
+  "Concluído (projeto executivo)",
   "Cancelado",
 ] as const;
 
@@ -171,11 +185,14 @@ export function artValor(p: Projeto): number {
 
 // ===================== Módulo Financeiro =====================
 
+export type TipoPasta = "fixa" | "variavel" | "receita_recorrente";
+
 export type Fornecedor = {
   id: string;
   nome: string;
   cnpj_cpf: string | null;
   categoria: string | null;
+  tipo_pasta: TipoPasta;
   pasta_url: string | null;
   criado_em: string;
 };
@@ -184,12 +201,21 @@ export type DespesaFixa = {
   id: string;
   descricao: string;
   categoria: string | null;
+  fornecedor_id: string | null;
   valor: number | null;
   dia_vencimento: number;
   pasta_url: string | null;
   ativo: boolean;
   criado_em: string;
 };
+
+// Subpastas fixas dentro de cada mês, pra separar por tipo de documento.
+export const PASTAS_MES = ["Boletos", "Comprovantes", "Recibos", "Notas Fiscais"];
+
+// Caminho completo: Ano/Mês/TipoDocumento (ex.: "2026/Junho/Boletos")
+export function pastaCompetenciaTipo(mes: string, tipoDoc: string): string {
+  return `${pastaCompetencia(mes)}/${tipoDoc}`;
+}
 
 export type VinculoTipo = "obra" | "empresa" | "despesa_fixa" | "nenhum";
 export type TipoContaPagar =
@@ -214,9 +240,12 @@ export type ContaPagar = {
   vinculo_id: string | null;
   pasta_url: string | null;
   despesa_fixa_id: string | null;
+  mes_competencia: string | null; // "YYYY-MM" — mês a que a despesa se refere (pode ser diferente do vencimento/pagamento)
   observacoes: string | null;
   criado_em: string;
 };
+
+export const FORMAS_PAGAMENTO = ["Boleto", "Pix", "Transferência", "Cartão de crédito"];
 
 export type TipoContaReceber = "boleto" | "pix" | "nota_fiscal";
 
@@ -224,6 +253,9 @@ export type ContaReceber = {
   id: string;
   cliente_id: string | null;
   obra_id: string | null;
+  fornecedor_id: string | null; // pasta do contratante, quando é um recebimento recorrente
+  receita_recorrente_id: string | null;
+  mes_competencia: string | null; // "YYYY-MM"
   tipo: TipoContaReceber;
   valor: number;
   vencimento: string | null;
@@ -235,14 +267,28 @@ export type ContaReceber = {
   criado_em: string;
 };
 
+export type ReceitaRecorrente = {
+  id: string;
+  descricao: string;
+  categoria: string | null;
+  fornecedor_id: string | null;
+  valor: number | null;
+  dia_vencimento: number;
+  ativo: boolean;
+  criado_em: string;
+};
+
 export type ProLabore = {
   id: string;
   mes_referencia: string;
   valor: number;
   data_pagamento: string | null;
+  forma_transferencia: string | null;
   comprovante_url: string | null;
   criado_em: string;
 };
+
+export const FORMAS_TRANSFERENCIA = ["Pix", "Transferência bancária"];
 
 export type NotaFiscal = {
   id: string;
@@ -329,6 +375,18 @@ export function labelMesReferencia(mes: string): string {
   return `${nomes[idx] ?? m}/${ano}`;
 }
 
+// Caminho de pasta Ano/Mês pra organizar despesas fixas (ex: "2026/Junho"),
+// usado dentro da pasta de cada despesa fixa (DAS, convênio, etc.)
+export function pastaCompetencia(mes: string): string {
+  const [ano, m] = mes.split("-");
+  const nomes = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+  ];
+  const idx = Number(m) - 1;
+  return `${ano}/${nomes[idx] ?? m}`;
+}
+
 // Linha unificada de recebíveis: junta Contas a Receber (nativo do
 // Financeiro) com os "Recebimentos" antigos ligados a obras (tabela
 // pagamentos), pra aparecerem numa lista só com o mesmo dar-baixa/reabrir
@@ -345,9 +403,16 @@ export type LinhaReceber = {
   dataRecebimento: string | null;
   status: FinanceiroStatus;
   clienteId: string | null;
+  obraId: string | null;
+  fornecedorId: string | null;
+  mesCompetencia: string | null;
 };
 
-export type EntidadeTipo = "cliente" | "fornecedor";
+export type EntidadeTipo = "cliente" | "fornecedor" | "projeto" | "empresa" | "despesa_fixa";
+
+// Pasta geral de documentos da empresa (aba Documentos) — usa esse id fixo
+// como entidade_id porque não está ligada a um cliente/obra específico.
+export const DOCUMENTOS_GERAL_ID = "00000000-0000-0000-0000-000000000001";
 export type LancamentoTipo = "pagar" | "receber" | "nota";
 
 export type Documento = {
@@ -356,11 +421,105 @@ export type Documento = {
   entidade_id: string | null;
   lancamento_tipo: LancamentoTipo | null;
   lancamento_id: string | null;
-  pasta: string | null;
+  pasta: string | null; // caminho completo, ex: "Notas Fiscais/Nota sinal"
   nome: string;
   path: string;
   tamanho: number | null;
   criado_em: string;
 };
 
+export type PastaDocumento = {
+  id: string;
+  entidade_tipo: EntidadeTipo;
+  entidade_id: string;
+  caminho: string; // caminho completo, ex: "Notas Fiscais/Nota sinal"
+  criado_em: string;
+};
+
+// Nome exibido de uma pasta = último segmento do caminho
+export function nomeDoCaminho(caminho: string): string {
+  const partes = caminho.split("/").filter(Boolean);
+  return partes[partes.length - 1] ?? caminho;
+}
+
+// Caminho do pai (uma pasta acima). Raiz = ""
+export function caminhoPai(caminho: string): string {
+  const partes = caminho.split("/").filter(Boolean);
+  partes.pop();
+  return partes.join("/");
+}
+
+export function juntarCaminho(base: string, nome: string): string {
+  return base ? `${base}/${nome}` : nome;
+}
+
 export const PASTAS_ENTIDADE = ["Notas Fiscais", "Boletos", "Comprovantes", "Outros"];
+
+// ============================================================
+//  Configurações: perfis de usuário (permissões) e dados da empresa
+// ============================================================
+
+export type Perfil = {
+  id: string;
+  user_id: string | null;
+  email: string;
+  nome: string | null;
+  is_admin: boolean;
+  areas: string[];
+  ativo: boolean;
+  criado_em: string;
+};
+
+export type Configuracoes = {
+  id: number;
+  razao_social: string;
+  cnpj: string;
+  paleta_cor: string;
+  relatorio_base_padrao: string;
+  atualizado_em: string;
+};
+
+// Cada área corresponde a uma aba do menu lateral (View em Sidebar.tsx)
+export const AREAS_DISPONIVEIS: { id: string; label: string }[] = [
+  { id: "overview", label: "Visão geral" },
+  { id: "clientes", label: "Obras / Clientes" },
+  { id: "orcamentos", label: "Orçamentos" },
+  { id: "rt", label: "RT / ART" },
+  { id: "documentos", label: "Documentos" },
+  { id: "financeiro", label: "Financeiro" },
+  { id: "fornecedores", label: "Fornecedores" },
+];
+
+// Paletas de cor prontas — cada uma já testada em claro/escuro pra não
+// quebrar contraste em nenhuma tela.
+export const PALETAS: {
+  id: string;
+  nome: string;
+  claro: { brand: string; brandDark: string; brandSoft: string };
+  escuro: { brand: string; brandDark: string; brandSoft: string };
+}[] = [
+  {
+    id: "azul",
+    nome: "Azul (padrão)",
+    claro: { brand: "62 124 177", brandDark: "44 92 138", brandSoft: "224 238 248" },
+    escuro: { brand: "96 162 219", brandDark: "62 124 177", brandSoft: "28 47 70" },
+  },
+  {
+    id: "verde",
+    nome: "Verde",
+    claro: { brand: "15 118 110", brandDark: "13 94 89", brandSoft: "219 240 237" },
+    escuro: { brand: "45 178 168", brandDark: "15 118 110", brandSoft: "22 54 51" },
+  },
+  {
+    id: "roxo",
+    nome: "Roxo",
+    claro: { brand: "109 90 190", brandDark: "84 68 153", brandSoft: "231 227 248" },
+    escuro: { brand: "150 133 224", brandDark: "109 90 190", brandSoft: "42 36 66" },
+  },
+  {
+    id: "grafite",
+    nome: "Grafite",
+    claro: { brand: "71 85 105", brandDark: "51 65 85", brandSoft: "226 232 240" },
+    escuro: { brand: "148 163 184", brandDark: "100 116 139", brandSoft: "38 43 51" },
+  },
+];
