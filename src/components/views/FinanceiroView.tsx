@@ -49,6 +49,7 @@ import { RelatorioMensalViewer } from "@/components/RelatorioFinanceiroDoc";
 import { PastaEntidade } from "@/components/PastaEntidade";
 import { AnexosLancamento } from "@/components/AnexosLancamento";
 import { ContextMenu, MenuContextoState, useFecharMenuAoClicarFora, BotaoMenu } from "@/components/ContextMenu";
+import { ConfirmModal, ConfirmState } from "@/components/PromptDialog";
 import { EntidadeTipo, LancamentoTipo } from "@/lib/types";
 
 type Tab = "fluxo" | "pagar" | "receber" | "prolabore";
@@ -84,6 +85,8 @@ export function FinanceiroView({
   const [notasFiscais, setNotasFiscais] = useState<NotaFiscal[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [avisoAcao, setAvisoAcao] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmState>(null);
 
   const load = useCallback(async () => {
     const [forn, desp, rects, pag, rec, pro, notas] = await Promise.all([
@@ -204,10 +207,22 @@ export function FinanceiroView({
     await load();
     return id;
   }
-  async function excluirPagar(c: ContaPagar) {
-    if (!confirm("Excluir este lançamento de Contas a Pagar?")) return;
-    await supabase.from("contas_pagar").delete().eq("id", c.id);
-    await load();
+  function excluirPagar(c: ContaPagar) {
+    setConfirmDialog({
+      titulo: "Excluir este lançamento?",
+      mensagem: c.descricao,
+      textoConfirmar: "Excluir",
+      perigo: true,
+      onConfirmar: async () => {
+        const { error } = await supabase.from("contas_pagar").delete().eq("id", c.id);
+        if (error) {
+          setAvisoAcao(`Não deu pra excluir: ${error.message}`);
+          return;
+        }
+        setErro(null);
+        await load();
+      },
+    });
   }
   async function baixarPagar(c: ContaPagar) {
     await supabase
@@ -257,15 +272,31 @@ export function FinanceiroView({
       await reloadProjetos();
     }
   }
-  async function excluirLinhaReceber(l: LinhaReceber) {
-    if (!confirm("Excluir este lançamento?")) return;
-    if (l.origem === "receber") {
-      await supabase.from("contas_receber").delete().eq("id", l.id);
-      await load();
-    } else {
-      await supabase.from("pagamentos").delete().eq("id", l.id);
-      await reloadProjetos();
-    }
+  function excluirLinhaReceber(l: LinhaReceber) {
+    setConfirmDialog({
+      titulo: "Excluir este lançamento?",
+      mensagem: l.titulo,
+      textoConfirmar: "Excluir",
+      perigo: true,
+      onConfirmar: async () => {
+        if (l.origem === "receber") {
+          const { error } = await supabase.from("contas_receber").delete().eq("id", l.id);
+          if (error) {
+            setAvisoAcao(`Não deu pra excluir: ${error.message}`);
+            return;
+          }
+          await load();
+        } else {
+          const { error } = await supabase.from("pagamentos").delete().eq("id", l.id);
+          if (error) {
+            setAvisoAcao(`Não deu pra excluir: ${error.message}`);
+            return;
+          }
+          await reloadProjetos();
+        }
+        setErro(null);
+      },
+    });
   }
 
   // ---------- CRUD: Despesas Fixas ----------
@@ -276,10 +307,22 @@ export function FinanceiroView({
     setEditDespesa(undefined);
     await load();
   }
-  async function excluirDespesa(d: DespesaFixa) {
-    if (!confirm("Excluir esta despesa fixa? Lançamentos já gerados não serão apagados.")) return;
-    await supabase.from("despesas_fixas").delete().eq("id", d.id);
-    await load();
+  function excluirDespesa(d: DespesaFixa) {
+    setConfirmDialog({
+      titulo: "Excluir esta despesa fixa?",
+      mensagem: `${d.descricao} — lançamentos já gerados não serão apagados.`,
+      textoConfirmar: "Excluir",
+      perigo: true,
+      onConfirmar: async () => {
+        const { error } = await supabase.from("despesas_fixas").delete().eq("id", d.id);
+        if (error) {
+          setAvisoAcao(`Não deu pra excluir: ${error.message}`);
+          return;
+        }
+        setErro(null);
+        await load();
+      },
+    });
   }
 
   // ---------- CRUD: Recebimentos Recorrentes ----------
@@ -290,10 +333,22 @@ export function FinanceiroView({
     setEditReceitaRecorrente(undefined);
     await load();
   }
-  async function excluirReceitaRecorrente(r: ReceitaRecorrente) {
-    if (!confirm("Excluir este recebimento recorrente? Lançamentos já gerados não serão apagados.")) return;
-    await supabase.from("receitas_recorrentes").delete().eq("id", r.id);
-    await load();
+  function excluirReceitaRecorrente(r: ReceitaRecorrente) {
+    setConfirmDialog({
+      titulo: "Excluir este recebimento recorrente?",
+      mensagem: `${r.descricao} — lançamentos já gerados não serão apagados.`,
+      textoConfirmar: "Excluir",
+      perigo: true,
+      onConfirmar: async () => {
+        const { error } = await supabase.from("receitas_recorrentes").delete().eq("id", r.id);
+        if (error) {
+          setAvisoAcao(`Não deu pra excluir: ${error.message}`);
+          return;
+        }
+        setErro(null);
+        await load();
+      },
+    });
   }
   async function gerarRecebimentosDoMes() {
     setGerando(true);
@@ -357,10 +412,21 @@ export function FinanceiroView({
     const { data, error } = await supabase.storage.from("anexos").createSignedUrl(p.comprovante_url, 120);
     if (!error && data) window.open(data.signedUrl, "_blank");
   }
-  async function excluirProLabore(p: ProLabore) {
-    if (!confirm("Excluir este pró-labore?")) return;
-    await supabase.from("pro_labore").delete().eq("id", p.id);
-    await load();
+  function excluirProLabore(p: ProLabore) {
+    setConfirmDialog({
+      titulo: "Excluir este pró-labore?",
+      textoConfirmar: "Excluir",
+      perigo: true,
+      onConfirmar: async () => {
+        const { error } = await supabase.from("pro_labore").delete().eq("id", p.id);
+        if (error) {
+          setAvisoAcao(`Não deu pra excluir: ${error.message}`);
+          return;
+        }
+        setErro(null);
+        await load();
+      },
+    });
   }
 
   // ---------- CRUD: Notas Fiscais ----------
@@ -371,10 +437,21 @@ export function FinanceiroView({
     setEditNota(undefined);
     await load();
   }
-  async function excluirNota(n: NotaFiscal) {
-    if (!confirm("Excluir esta nota fiscal?")) return;
-    await supabase.from("notas_fiscais").delete().eq("id", n.id);
-    await load();
+  function excluirNota(n: NotaFiscal) {
+    setConfirmDialog({
+      titulo: "Excluir esta nota fiscal?",
+      textoConfirmar: "Excluir",
+      perigo: true,
+      onConfirmar: async () => {
+        const { error } = await supabase.from("notas_fiscais").delete().eq("id", n.id);
+        if (error) {
+          setAvisoAcao(`Não deu pra excluir: ${error.message}`);
+          return;
+        }
+        setErro(null);
+        await load();
+      },
+    });
   }
 
   // ---------- Cadastro rápido ----------
@@ -539,6 +616,14 @@ export function FinanceiroView({
 
   return (
     <div className="animate-fade-up">
+      {avisoAcao && (
+        <p className="mb-3 rounded-lg bg-amber-500/10 px-3 py-2.5 text-sm font-medium text-amber-700">
+          ⚠ {avisoAcao}
+          <button onClick={() => setAvisoAcao(null)} className="ml-2 underline">
+            fechar
+          </button>
+        </p>
+      )}
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-1.5">
           {TABS.map((t) => (
@@ -605,7 +690,7 @@ export function FinanceiroView({
           onAbrirPastaDespesaFixa={(d) => {
             const f = fornecedores.find((x) => x.id === d.fornecedor_id);
             if (f) setShowPasta({ tipo: "fornecedor", id: f.id, nome: f.nome });
-            else alert("Essa despesa fixa ainda não tem uma pasta vinculada. Edite e escolha uma em Fornecedores.");
+            else setAvisoAcao("Essa despesa fixa ainda não tem uma pasta vinculada. Edite e escolha uma em Fornecedores.");
           }}
         />
       )}
@@ -647,7 +732,7 @@ export function FinanceiroView({
           onAbrirPastaReceitaRecorrente={(r) => {
             const f = fornecedores.find((x) => x.id === r.fornecedor_id);
             if (f) setShowPasta({ tipo: "fornecedor", id: f.id, nome: f.nome });
-            else alert("Esse recebimento recorrente ainda não tem uma pasta vinculada. Edite e escolha uma em Fornecedores.");
+            else setAvisoAcao("Esse recebimento recorrente ainda não tem uma pasta vinculada. Edite e escolha uma em Fornecedores.");
           }}
         />
       )}
@@ -754,6 +839,7 @@ export function FinanceiroView({
           onClose={() => setShowAnexos(null)}
         />
       )}
+      {confirmDialog && <ConfirmModal estado={confirmDialog} onFechar={() => setConfirmDialog(null)} />}
     </div>
   );
 }

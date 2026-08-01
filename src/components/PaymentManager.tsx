@@ -19,6 +19,7 @@ export function PaymentManager({
   const [valor, setValor] = useState("");
   const [venc, setVenc] = useState("");
   const [busy, setBusy] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
 
   // Configuração rápida do plano de pagamento (só aparece antes de ter
   // qualquer parcela lançada, pra não bagunçar um plano já em andamento)
@@ -41,40 +42,50 @@ export function PaymentManager({
   async function addPagamento(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    await supabase.from("pagamentos").insert({
+    const { error } = await supabase.from("pagamentos").insert({
       projeto_id: projeto.id,
       descricao: desc.trim() || null,
       valor: Number(valor) || 0,
       data_vencimento: venc || null,
       data_pagamento: null,
     });
+    setBusy(false);
+    if (error) {
+      setErro(`Não deu pra lançar: ${error.message}`);
+      return;
+    }
+    setErro(null);
     setDesc("");
     setValor("");
     setVenc("");
     setAdding(false);
-    setBusy(false);
     onChanged();
   }
 
   async function criarPlanoAVista(e: React.FormEvent) {
     e.preventDefault();
     setCriandoPlano(true);
-    await supabase.from("pagamentos").insert({
+    const { error } = await supabase.from("pagamentos").insert({
       projeto_id: projeto.id,
       descricao: "À vista",
       valor: Number(pVista) || 0,
       data_vencimento: pVistaData || null,
       data_pagamento: null,
     });
-    setModoPlano(null);
     setCriandoPlano(false);
+    if (error) {
+      setErro(`Não deu pra criar o plano: ${error.message}`);
+      return;
+    }
+    setErro(null);
+    setModoPlano(null);
     onChanged();
   }
 
   async function criarPlanoSinalConclusao(e: React.FormEvent) {
     e.preventDefault();
     setCriandoPlano(true);
-    await supabase.from("pagamentos").insert([
+    const { error } = await supabase.from("pagamentos").insert([
       {
         projeto_id: projeto.id,
         descricao: "Sinal",
@@ -90,26 +101,46 @@ export function PaymentManager({
         data_pagamento: null,
       },
     ]);
-    setModoPlano(null);
     setCriandoPlano(false);
+    if (error) {
+      setErro(`Não deu pra criar o plano: ${error.message}`);
+      return;
+    }
+    setErro(null);
+    setModoPlano(null);
     onChanged();
   }
 
   async function togglePago(id: string, pago: boolean) {
-    await supabase
+    const { error } = await supabase
       .from("pagamentos")
       .update({ data_pagamento: pago ? null : hoje() })
       .eq("id", id);
+    if (error) {
+      setErro(`Não deu pra atualizar: ${error.message}`);
+      return;
+    }
+    setErro(null);
     onChanged();
   }
 
   async function removePagamento(id: string) {
-    await supabase.from("pagamentos").delete().eq("id", id);
+    const { error } = await supabase.from("pagamentos").delete().eq("id", id);
+    if (error) {
+      setErro(`Não deu pra excluir: ${error.message}`);
+      return;
+    }
+    setErro(null);
     onChanged();
   }
 
   return (
     <div className="rounded-xl border border-line bg-canvas/40 p-4">
+      {erro && (
+        <p className="mb-3 rounded-lg bg-rose-500/10 px-3 py-2.5 text-sm font-medium text-rose-500">
+          ⚠ {erro}
+        </p>
+      )}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h4 className="text-sm font-semibold text-ink">Recebimentos</h4>
         <div className="flex items-center gap-3 text-xs text-ink-soft">

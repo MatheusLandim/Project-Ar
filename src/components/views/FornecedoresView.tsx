@@ -176,6 +176,7 @@ export function FornecedoresView() {
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [avisoAcao, setAvisoAcao] = useState<string | null>(null);
   const [buscaFixas, setBuscaFixas] = useState("");
   const [buscaVariaveis, setBuscaVariaveis] = useState("");
   const [buscaRecorrentes, setBuscaRecorrentes] = useState("");
@@ -217,7 +218,11 @@ export function FornecedoresView() {
   async function moverPara(fornecedorId: string, novoTipo: TipoPasta) {
     const atual = fornecedores.find((f) => f.id === fornecedorId);
     if (!atual || atual.tipo_pasta === novoTipo) return;
-    await supabase.from("fornecedores").update({ tipo_pasta: novoTipo }).eq("id", fornecedorId);
+    const { error } = await supabase.from("fornecedores").update({ tipo_pasta: novoTipo }).eq("id", fornecedorId);
+    if (error) {
+      setAvisoAcao(`Não deu pra mover: ${error.message}`);
+      return;
+    }
     await load();
   }
 
@@ -269,6 +274,14 @@ export function FornecedoresView() {
 
   return (
     <div className="animate-fade-up space-y-8">
+      {avisoAcao && (
+        <p className="rounded-lg bg-amber-500/10 px-3 py-2.5 text-sm font-medium text-amber-700">
+          ⚠ {avisoAcao}
+          <button onClick={() => setAvisoAcao(null)} className="ml-2 underline">
+            fechar
+          </button>
+        </p>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-md text-sm text-ink-soft">
           Cada pasta guarda documentos organizados por ano e mês. Arraste uma pasta pra outra seção

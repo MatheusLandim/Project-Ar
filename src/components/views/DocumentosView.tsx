@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Documento, PastaDocumento, DOCUMENTOS_GERAL_ID, juntarCaminho } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 import { ContextMenu, MenuContextoState, useFecharMenuAoClicarFora, BotaoMenu } from "@/components/ContextMenu";
+import { PromptModal, ConfirmModal, PromptState, ConfirmState } from "@/components/PromptDialog";
 
 // Pastas iniciais sugeridas — só um ponto de partida, 100% editáveis
 // (renomeia, exclui, cria outras do jeito que quiser, igual Windows).
@@ -57,6 +58,8 @@ export function DocumentosView() {
   const [caminhoAtual, setCaminhoAtual] = useState(""); // "" = raiz
   const [busca, setBusca] = useState("");
   const [menu, setMenu] = useState<MenuContextoState | null>(null);
+  const [prompt, setPrompt] = useState<PromptState>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmState>(null);
   useFecharMenuAoClicarFora(!!menu, () => setMenu(null));
 
   async function load() {
@@ -150,61 +153,81 @@ export function DocumentosView() {
     setCaminhoAtual(partesCaminho.slice(0, -1).join("/"));
   }
 
-  async function novaPasta() {
-    const nome = window.prompt("Nome da nova pasta:");
-    if (!nome || !nome.trim()) return;
-    const caminho = juntarCaminho(caminhoAtual, nome.trim());
-    const { error } = await supabase.from("pastas_documentos").insert({
-      entidade_tipo: "empresa",
-      entidade_id: DOCUMENTOS_GERAL_ID,
-      caminho,
+  function novaPasta() {
+    setPrompt({
+      titulo: "Nome da nova pasta",
+      placeholder: "Ex.: Contratos 2026",
+      onConfirmar: async (nome) => {
+        const caminho = juntarCaminho(caminhoAtual, nome);
+        const { error } = await supabase.from("pastas_documentos").insert({
+          entidade_tipo: "empresa",
+          entidade_id: DOCUMENTOS_GERAL_ID,
+          caminho,
+        });
+        if (error && !error.message.toLowerCase().includes("duplicate")) {
+          setErro(`Não deu pra criar a pasta: ${error.message}`);
+          return;
+        }
+        setErro(null);
+        await load();
+      },
     });
-    if (error && !error.message.includes("duplicate")) {
-      setErro(error.message);
-      return;
-    }
-    await load();
   }
 
-  async function renomearPasta(nomeSub: string) {
+  function renomearPasta(nomeSub: string) {
     const caminhoAntigo = juntarCaminho(caminhoAtual, nomeSub);
-    const novoNome = window.prompt("Novo nome da pasta:", nomeSub);
-    if (!novoNome || !novoNome.trim() || novoNome.trim() === nomeSub) return;
-    const caminhoNovo = juntarCaminho(caminhoAtual, novoNome.trim());
+    setPrompt({
+      titulo: `Renomear "${nomeSub}"`,
+      valorInicial: nomeSub,
+      onConfirmar: async (novoNome) => {
+        if (novoNome.trim() === nomeSub) return;
+        const caminhoNovo = juntarCaminho(caminhoAtual, novoNome.trim());
 
-    const pastasAlvo = pastas.filter(
-      (p) => p.caminho === caminhoAntigo || p.caminho.startsWith(`${caminhoAntigo}/`)
-    );
-    const docsAlvo = docs.filter(
-      (d) => d.pasta === caminhoAntigo || (d.pasta ?? "").startsWith(`${caminhoAntigo}/`)
-    );
+        const pastasAlvo = pastas.filter(
+          (p) => p.caminho === caminhoAntigo || p.caminho.startsWith(`${caminhoAntigo}/`)
+        );
+        const docsAlvo = docs.filter(
+          (d) => d.pasta === caminhoAntigo || (d.pasta ?? "").startsWith(`${caminhoAntigo}/`)
+        );
 
-    await Promise.all([
-      ...pastasAlvo.map((p) =>
-        supabase
-          .from("pastas_documentos")
-          .update({ caminho: caminhoNovo + p.caminho.slice(caminhoAntigo.length) })
-          .eq("id", p.id)
-      ),
-      ...docsAlvo.map((d) =>
-        supabase
-          .from("documentos")
-          .update({ pasta: caminhoNovo + (d.pasta ?? "").slice(caminhoAntigo.length) })
-          .eq("id", d.id)
-      ),
-    ]);
+        const resultados = await Promise.all([
+          ...pastasAlvo.map((p) =>
+            supabase
+              .from("pastas_documentos")
+              .update({ caminho: caminhoNovo + p.caminho.slice(caminhoAntigo.length) })
+              .eq("id", p.id)
+          ),
+          ...docsAlvo.map((d) =>
+            supabase
+              .from("documentos")
+              .update({ pasta: caminhoNovo + (d.pasta ?? "").slice(caminhoAntigo.length) })
+              .eq("id", d.id)
+          ),
+        ]);
+        const erroEncontrado = resultados.find((r) => r.error)?.error;
+        if (erroEncontrado) {
+          setErro(`Não deu pra renomear: ${erroEncontrado.message}`);
+          return;
+        }
 
-    if (pastasAlvo.length === 0) {
-      await supabase.from("pastas_documentos").insert({
-        entidade_tipo: "empresa",
-        entidade_id: DOCUMENTOS_GERAL_ID,
-        caminho: caminhoNovo,
-      });
-    }
-    await load();
+        if (pastasAlvo.length === 0) {
+          const { error } = await supabase.from("pastas_documentos").insert({
+            entidade_tipo: "empresa",
+            entidade_id: DOCUMENTOS_GERAL_ID,
+            caminho: caminhoNovo,
+          });
+          if (error) {
+            setErro(`Não deu pra renomear: ${error.message}`);
+            return;
+          }
+        }
+        setErro(null);
+        await load();
+      },
+    });
   }
 
-  async function excluirPasta(nomeSub: string) {
+  function excluirPasta(nomeSub: string) {
     const caminhoAlvo = juntarCaminho(caminhoAtual, nomeSub);
     const docsAlvo = docs.filter(
       (d) => d.pasta === caminhoAlvo || (d.pasta ?? "").startsWith(`${caminhoAlvo}/`)
@@ -212,27 +235,55 @@ export function DocumentosView() {
     const pastasAlvo = pastas.filter(
       (p) => p.caminho === caminhoAlvo || p.caminho.startsWith(`${caminhoAlvo}/`)
     );
-    const aviso =
-      docsAlvo.length > 0
-        ? `Essa pasta tem ${docsAlvo.length} arquivo(s) dentro (incluindo subpastas). Excluir tudo?`
-        : "Excluir esta pasta vazia?";
-    if (!window.confirm(aviso)) return;
-
-    if (docsAlvo.length > 0) {
-      await supabase.storage.from("anexos").remove(docsAlvo.map((d) => d.path));
-      await supabase.from("documentos").delete().in("id", docsAlvo.map((d) => d.id));
-    }
-    if (pastasAlvo.length > 0) {
-      await supabase.from("pastas_documentos").delete().in("id", pastasAlvo.map((p) => p.id));
-    }
-    await load();
+    setConfirmDialog({
+      titulo: `Excluir "${nomeSub}"?`,
+      mensagem:
+        docsAlvo.length > 0
+          ? `Essa pasta tem ${docsAlvo.length} arquivo(s) dentro (incluindo subpastas). Todos serão excluídos junto.`
+          : "Essa pasta está vazia.",
+      textoConfirmar: "Excluir",
+      perigo: true,
+      onConfirmar: async () => {
+        if (docsAlvo.length > 0) {
+          const del1 = await supabase.storage.from("anexos").remove(docsAlvo.map((d) => d.path));
+          if (del1.error) {
+            setErro(`Não deu pra excluir os arquivos: ${del1.error.message}`);
+            return;
+          }
+          const del2 = await supabase.from("documentos").delete().in("id", docsAlvo.map((d) => d.id));
+          if (del2.error) {
+            setErro(`Não deu pra excluir os arquivos do banco: ${del2.error.message}`);
+            return;
+          }
+        }
+        if (pastasAlvo.length > 0) {
+          const del3 = await supabase.from("pastas_documentos").delete().in("id", pastasAlvo.map((p) => p.id));
+          if (del3.error) {
+            setErro(`Não deu pra excluir a pasta: ${del3.error.message}`);
+            return;
+          }
+        }
+        setErro(null);
+        await load();
+      },
+    });
   }
 
-  async function renomearArquivo(d: Documento) {
-    const novoNome = window.prompt("Novo nome do arquivo:", d.nome);
-    if (!novoNome || !novoNome.trim() || novoNome.trim() === d.nome) return;
-    await supabase.from("documentos").update({ nome: novoNome.trim() }).eq("id", d.id);
-    await load();
+  function renomearArquivo(d: Documento) {
+    setPrompt({
+      titulo: `Renomear "${d.nome}"`,
+      valorInicial: d.nome,
+      onConfirmar: async (novoNome) => {
+        if (novoNome.trim() === d.nome) return;
+        const { error } = await supabase.from("documentos").update({ nome: novoNome.trim() }).eq("id", d.id);
+        if (error) {
+          setErro(`Não deu pra renomear o arquivo: ${error.message}`);
+          return;
+        }
+        setErro(null);
+        await load();
+      },
+    });
   }
 
   async function enviar(file: File) {
@@ -274,15 +325,35 @@ export function DocumentosView() {
     if (!error && data) window.open(data.signedUrl, "_blank");
   }
 
-  async function excluirArquivo(id: string, path: string) {
-    if (!confirm("Excluir este arquivo?")) return;
-    await supabase.storage.from("anexos").remove([path]);
-    await supabase.from("documentos").delete().eq("id", id);
-    await load();
+  function excluirArquivo(id: string, path: string, nome: string) {
+    setConfirmDialog({
+      titulo: `Excluir "${nome}"?`,
+      textoConfirmar: "Excluir",
+      perigo: true,
+      onConfirmar: async () => {
+        const del1 = await supabase.storage.from("anexos").remove([path]);
+        if (del1.error) {
+          setErro(`Não deu pra excluir o arquivo: ${del1.error.message}`);
+          return;
+        }
+        const del2 = await supabase.from("documentos").delete().eq("id", id);
+        if (del2.error) {
+          setErro(`Não deu pra excluir o arquivo do banco: ${del2.error.message}`);
+          return;
+        }
+        setErro(null);
+        await load();
+      },
+    });
   }
 
   return (
     <div className="animate-fade-up">
+      {erro && (
+        <p className="mb-3 rounded-lg bg-rose-500/10 px-3 py-2.5 text-sm font-medium text-rose-500">
+          ⚠ {erro}
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <input
           value={busca}
@@ -377,7 +448,7 @@ export function DocumentosView() {
                       opcoes: [
                         { label: "Abrir / baixar", onClick: () => abrir(d.path) },
                         { label: "Renomear", onClick: () => renomearArquivo(d) },
-                        { label: "Excluir", tone: "danger", onClick: () => excluirArquivo(d.id, d.path) },
+                        { label: "Excluir", tone: "danger", onClick: () => excluirArquivo(d.id, d.path, d.nome) },
                       ],
                     });
                   }}
@@ -399,7 +470,7 @@ export function DocumentosView() {
                         opcoes: [
                           { label: "Abrir / baixar", onClick: () => abrir(d.path) },
                           { label: "Renomear", onClick: () => renomearArquivo(d) },
-                          { label: "Excluir", tone: "danger", onClick: () => excluirArquivo(d.id, d.path) },
+                          { label: "Excluir", tone: "danger", onClick: () => excluirArquivo(d.id, d.path, d.nome) },
                         ],
                       })
                     }
@@ -469,7 +540,7 @@ export function DocumentosView() {
                     opcoes: [
                       { label: "Abrir / baixar", onClick: () => abrir(d.path) },
                       { label: "Renomear", onClick: () => renomearArquivo(d) },
-                      { label: "Excluir", tone: "danger", onClick: () => excluirArquivo(d.id, d.path) },
+                      { label: "Excluir", tone: "danger", onClick: () => excluirArquivo(d.id, d.path, d.nome) },
                     ],
                   });
                 }}
@@ -490,7 +561,7 @@ export function DocumentosView() {
                       opcoes: [
                         { label: "Abrir / baixar", onClick: () => abrir(d.path) },
                         { label: "Renomear", onClick: () => renomearArquivo(d) },
-                        { label: "Excluir", tone: "danger", onClick: () => excluirArquivo(d.id, d.path) },
+                        { label: "Excluir", tone: "danger", onClick: () => excluirArquivo(d.id, d.path, d.nome) },
                       ],
                     })
                   }
@@ -499,13 +570,11 @@ export function DocumentosView() {
             ))}
           </div>
         )}
-
-        {erro && (
-          <p className="mt-3 rounded-lg bg-rose-500/10 px-3 py-2 text-sm text-rose-500">{erro}</p>
-        )}
       </div>
 
       {menu && <ContextMenu menu={menu} onFechar={() => setMenu(null)} />}
+      {prompt && <PromptModal estado={prompt} onFechar={() => setPrompt(null)} />}
+      {confirmDialog && <ConfirmModal estado={confirmDialog} onFechar={() => setConfirmDialog(null)} />}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Documento, EntidadeTipo, LancamentoTipo, PASTAS_ENTIDADE, PASTAS_MES, PASTAS_OBRA_CONTABEIS, iconePasta } from "@/lib/types";
 import { formatDate } from "@/lib/format";
+import { ConfirmModal, ConfirmState } from "@/components/PromptDialog";
 
 function tamanhoLegivel(bytes: number | null) {
   if (!bytes) return "";
@@ -37,6 +38,7 @@ export function AnexosLancamento({
   const [tipoDoc, setTipoDoc] = useState(PASTAS_MES[0]);
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmState>(null);
 
   async function load() {
     setLoading(true);
@@ -96,11 +98,26 @@ export function AnexosLancamento({
     if (!error && data) window.open(data.signedUrl, "_blank");
   }
 
-  async function excluir(id: string, p: string) {
-    if (!confirm("Excluir este arquivo?")) return;
-    await supabase.storage.from("anexos").remove([p]);
-    await supabase.from("documentos").delete().eq("id", id);
-    await load();
+  function excluir(id: string, p: string) {
+    setConfirmDialog({
+      titulo: "Excluir este arquivo?",
+      textoConfirmar: "Excluir",
+      perigo: true,
+      onConfirmar: async () => {
+        const del1 = await supabase.storage.from("anexos").remove([p]);
+        if (del1.error) {
+          setErro(`Não deu pra excluir o arquivo: ${del1.error.message}`);
+          return;
+        }
+        const del2 = await supabase.from("documentos").delete().eq("id", id);
+        if (del2.error) {
+          setErro(`Não deu pra excluir o arquivo do banco: ${del2.error.message}`);
+          return;
+        }
+        setErro(null);
+        await load();
+      },
+    });
   }
 
   return (
@@ -225,6 +242,7 @@ export function AnexosLancamento({
           )}
         </div>
       </div>
+      {confirmDialog && <ConfirmModal estado={confirmDialog} onFechar={() => setConfirmDialog(null)} />}
     </div>
   );
 }
