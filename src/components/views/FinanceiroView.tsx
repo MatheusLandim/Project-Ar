@@ -154,11 +154,23 @@ export function FinanceiroView({
 
   function infoAnexoPagar(c: ContaPagar) {
     const fId = fornecedorDoLancamento(c);
-    return {
-      entidadeTipo: fId ? ("fornecedor" as EntidadeTipo) : null,
-      entidadeId: fId,
-      pastaFixa: fId && c.mes_competencia ? pastaCompetencia(c.mes_competencia) : null,
-    };
+    if (fId) {
+      return {
+        entidadeTipo: "fornecedor" as EntidadeTipo,
+        entidadeId: fId,
+        pastaFixa: c.mes_competencia ? pastaCompetencia(c.mes_competencia) : null,
+      };
+    }
+    // Sem fornecedor vinculado (ex.: RT/ART, despesa ligada direto à obra):
+    // a pasta é a da própria obra.
+    if (c.obra_id) {
+      return {
+        entidadeTipo: "projeto" as EntidadeTipo,
+        entidadeId: c.obra_id,
+        pastaFixa: null,
+      };
+    }
+    return { entidadeTipo: null, entidadeId: null, pastaFixa: null };
   }
 
   // ---------- CRUD: Contas a Pagar ----------
@@ -423,20 +435,44 @@ export function FinanceiroView({
 
   // ---------- Unificação: Contas a Receber + Recebimentos (obras) ----------
   const linhasReceber = useMemo<LinhaReceber[]>(() => {
-    const nativas: LinhaReceber[] = contasReceber.map((c) => ({
-      id: c.id,
-      origem: "receber",
-      titulo: clientes.find((x) => x.id === c.cliente_id)?.nome ?? "—",
-      subtitulo: TIPOS_CONTA_RECEBER[c.tipo] + (c.numero_nf ? ` · NF ${c.numero_nf}` : ""),
-      valor: Number(c.valor),
-      vencimento: c.vencimento,
-      dataRecebimento: c.data_recebimento,
-      status: contaReceberStatus(c),
-      clienteId: c.cliente_id,
-      obraId: c.obra_id,
-      fornecedorId: c.fornecedor_id,
-      mesCompetencia: c.mes_competencia,
-    }));
+    const nativas: LinhaReceber[] = contasReceber.map((c) => {
+      const tipoLabel = TIPOS_CONTA_RECEBER[c.tipo] + (c.numero_nf ? ` · NF ${c.numero_nf}` : "");
+      if (c.fornecedor_id) {
+        // Recebimento recorrente: mostra o contratante (pasta em Fornecedores)
+        const f = fornecedores.find((x) => x.id === c.fornecedor_id);
+        const r = receitasRecorrentes.find((x) => x.id === c.receita_recorrente_id);
+        return {
+          id: c.id,
+          origem: "receber",
+          titulo: f?.nome ?? "—",
+          subtitulo: `${r?.descricao || "Recebimento recorrente"} · ${tipoLabel}`,
+          valor: Number(c.valor),
+          vencimento: c.vencimento,
+          dataRecebimento: c.data_recebimento,
+          status: contaReceberStatus(c),
+          clienteId: c.cliente_id,
+          obraId: c.obra_id,
+          fornecedorId: c.fornecedor_id,
+          mesCompetencia: c.mes_competencia,
+        };
+      }
+      // Ligado a cliente/obra: mostra o nome da obra junto do cliente
+      const obra = c.obra_id ? projetos.find((x) => x.id === c.obra_id) : null;
+      return {
+        id: c.id,
+        origem: "receber",
+        titulo: clientes.find((x) => x.id === c.cliente_id)?.nome ?? "—",
+        subtitulo: (obra ? `${obra.projeto} · ` : "") + tipoLabel,
+        valor: Number(c.valor),
+        vencimento: c.vencimento,
+        dataRecebimento: c.data_recebimento,
+        status: contaReceberStatus(c),
+        clienteId: c.cliente_id,
+        obraId: c.obra_id,
+        fornecedorId: c.fornecedor_id,
+        mesCompetencia: c.mes_competencia,
+      };
+    });
     const deObras: LinhaReceber[] = [];
     for (const p of projetos) {
       for (const pg of p.pagamentos ?? []) {
@@ -457,7 +493,7 @@ export function FinanceiroView({
       }
     }
     return [...nativas, ...deObras].sort((a, b) => (a.vencimento ?? "9999").localeCompare(b.vencimento ?? "9999"));
-  }, [contasReceber, projetos, clientes]);
+  }, [contasReceber, projetos, clientes, fornecedores, receitasRecorrentes]);
 
   // ---------- Totais / Fluxo de caixa (mês selecionado) ----------
   const totais = useMemo(() => {
@@ -544,7 +580,14 @@ export function FinanceiroView({
           onAbrirPasta={(c) => {
             const fId = fornecedorDoLancamento(c);
             const f = fornecedores.find((x) => x.id === fId);
-            if (f) setShowPasta({ tipo: "fornecedor", id: f.id, nome: f.nome });
+            if (f) {
+              setShowPasta({ tipo: "fornecedor", id: f.id, nome: f.nome });
+              return;
+            }
+            if (c.obra_id) {
+              const p = projetos.find((x) => x.id === c.obra_id);
+              if (p) setShowPasta({ tipo: "projeto", id: p.id, nome: p.projeto || p.cliente });
+            }
           }}
           onAbrirAnexos={(c) => setShowAnexos({
             tipo: "pagar",

@@ -142,9 +142,17 @@ export function PaymentManager({
           <input
             value={desc}
             onChange={(e) => setDesc(e.target.value)}
-            placeholder="Descrição (ex.: Entrada, Parcela 1)"
+            list="sugestoes-pagamento"
+            placeholder="Sinal, Conclusão, À vista, Medição 1…"
             className="rounded-md border border-line bg-surface px-2.5 py-2 text-sm text-ink"
           />
+          <datalist id="sugestoes-pagamento">
+            <option value="Sinal" />
+            <option value="Conclusão" />
+            <option value="À vista" />
+            <option value="Medição 1" />
+            <option value="Medição 2" />
+          </datalist>
           <input
             type="number"
             step="0.01"

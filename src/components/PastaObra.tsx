@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Documento, PastaDocumento, Projeto, STATUS_PROJETO, juntarCaminho } from "@/lib/types";
 import { brl, formatDate } from "@/lib/format";
 import { ContextMenu, MenuContextoState, useFecharMenuAoClicarFora, BotaoMenu } from "@/components/ContextMenu";
+import { PaymentManager } from "@/components/PaymentManager";
 
 const PASTAS_PADRAO = ["Aprovação", "Boleto", "Notas Fiscais e Recibos", "Comprovantes"];
 
@@ -46,10 +47,12 @@ export function PastaObra({
   projeto,
   onVoltar,
   onSalvar,
+  onRecarregar,
 }: {
   projeto: Projeto;
   onVoltar: () => void;
   onSalvar: (id: string, campos: Record<string, unknown>) => Promise<string | null>;
+  onRecarregar: () => void;
 }) {
   const supabase = createClient();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -545,6 +548,12 @@ export function PastaObra({
         {erroResumo && (
           <p className="mt-3 rounded-lg bg-rose-500/10 px-3 py-2 text-sm text-rose-500">{erroResumo}</p>
         )}
+      </div>
+
+      {/* Recebimentos (sinal, conclusão, à vista…) — na mesma página, logo
+          abaixo do resumo, pra editar tudo num lugar só */}
+      <div className="mt-4 rounded-2xl border border-line glass p-5">
+        <PaymentManager projeto={projeto} onChanged={onRecarregar} />
       </div>
 
       {/* Documentos da obra — abaixo do resumo */}

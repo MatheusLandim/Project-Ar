@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Documento, EntidadeTipo, LancamentoTipo, PASTAS_ENTIDADE, PASTAS_MES, iconePasta } from "@/lib/types";
+import { Documento, EntidadeTipo, LancamentoTipo, PASTAS_ENTIDADE, PASTAS_MES, PASTAS_OBRA_CONTABEIS, iconePasta } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 
 function tamanhoLegivel(bytes: number | null) {
@@ -193,7 +193,7 @@ export function AnexosLancamento({
                 onChange={(e) => setPasta(e.target.value)}
                 className="t-colors rounded-lg border border-line bg-surface px-2.5 py-2 text-sm text-ink"
               >
-                {PASTAS_ENTIDADE.map((p) => (
+                {(entidadeTipo === "projeto" ? PASTAS_OBRA_CONTABEIS : PASTAS_ENTIDADE).map((p) => (
                   <option key={p} value={p}>{p}</option>
                 ))}
               </select>

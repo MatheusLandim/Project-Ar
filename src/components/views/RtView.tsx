@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Projeto, rtValor, artValor } from "@/lib/types";
+import { Projeto, rtValor, artValor, mesReferenciaAtual } from "@/lib/types";
 import { brl, formatDate, hoje } from "@/lib/format";
 import { ContextMenu, MenuContextoState, useFecharMenuAoClicarFora, BotaoMenu } from "@/components/ContextMenu";
 
@@ -81,11 +81,40 @@ export function RtView({
     .reduce((s, l) => s + l.valor, 0);
 
   async function toggle(l: Linha) {
+    const marcandoComoPago = !l.pago;
     const campos =
       l.tipo === "RT"
-        ? { rt_pago: !l.pago, rt_data_pagamento: !l.pago ? hoje() : null }
-        : { art_pago: !l.pago, art_data_pagamento: !l.pago ? hoje() : null };
+        ? { rt_pago: marcandoComoPago, rt_data_pagamento: marcandoComoPago ? hoje() : null }
+        : { art_pago: marcandoComoPago, art_data_pagamento: marcandoComoPago ? hoje() : null };
     await supabase.from("projetos").update(campos).eq("id", l.projeto.id);
+
+    // Mantém um lançamento espelho em Contas a Pagar, pra RT/ART entrarem
+    // no Fluxo de Caixa e no relatório mensal junto com o resto.
+    const tipoContaPagar = l.tipo === "RT" ? "rt" : "art";
+    if (marcandoComoPago) {
+      const { data: existente } = await supabase
+        .from("contas_pagar")
+        .select("id")
+        .eq("obra_id", l.projeto.id)
+        .eq("tipo", tipoContaPagar)
+        .maybeSingle();
+      if (!existente) {
+        await supabase.from("contas_pagar").insert({
+          tipo: tipoContaPagar,
+          descricao: `${l.tipo} — ${l.projeto.projeto || l.projeto.cliente}`,
+          valor: l.valor,
+          obra_id: l.projeto.id,
+          vinculo_tipo: "obra",
+          vinculo_id: l.projeto.id,
+          vencimento: hoje(),
+          data_pagamento: hoje(),
+          mes_competencia: mesReferenciaAtual(),
+        });
+      }
+    } else {
+      // Reabrindo: remove o lançamento espelho, se existir
+      await supabase.from("contas_pagar").delete().eq("obra_id", l.projeto.id).eq("tipo", tipoContaPagar);
+    }
     reload();
   }
 

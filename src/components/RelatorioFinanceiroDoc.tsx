@@ -13,6 +13,7 @@ import {
   labelMesReferencia,
   mesReferenciaAtual,
   PASTAS_MES,
+  PASTAS_OBRA_CONTABEIS,
 } from "@/lib/types";
 import { brl, formatDate } from "@/lib/format";
 
@@ -43,10 +44,9 @@ function linhasNoPeriodo<T>(itens: T[], mesInicio: string, mesFim: string, campo
 // Pastas da obra cujos arquivos podem entrar no relatório — mesmos nomes
 // das pastas padrão criadas em cada obra. "Aprovação" fica de fora, não é
 // documento contábil.
-const PASTAS_CONTABEIS = ["Boleto", "Notas Fiscais e Recibos", "Comprovantes"];
 function daPastaContabil(pasta: string | null) {
   if (!pasta) return false;
-  return PASTAS_CONTABEIS.some((p) => pasta === p || pasta.startsWith(`${p}/`));
+  return PASTAS_OBRA_CONTABEIS.some((p) => pasta === p || pasta.startsWith(`${p}/`));
 }
 
 // Pastas de fornecedor (fixa/variável/recorrente): a subpasta final dentro

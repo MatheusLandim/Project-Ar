@@ -74,6 +74,7 @@ export function ClientesView({
   onEdit,
   onDelete,
   onAtualizarObra,
+  reload,
   obraParaAbrir,
   onObraAberta,
 }: {
@@ -85,6 +86,7 @@ export function ClientesView({
   onEdit: (c: Cliente) => void;
   onDelete: (c: Cliente) => void;
   onAtualizarObra: (id: string, campos: Record<string, unknown>) => Promise<string | null>;
+  reload: () => void;
   obraParaAbrir?: string | null;
   onObraAberta?: () => void;
 }) {
@@ -183,6 +185,7 @@ export function ClientesView({
         projeto={obraAberta}
         onVoltar={() => setObraAbertaId(null)}
         onSalvar={onAtualizarObra}
+        onRecarregar={reload}
       />
     );
   }

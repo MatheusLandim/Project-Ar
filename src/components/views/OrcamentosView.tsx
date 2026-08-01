@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Orcamento, STATUS_ORCAMENTO, totalOrcamento } from "@/lib/types";
+import { Orcamento, Projeto, STATUS_ORCAMENTO, totalOrcamento } from "@/lib/types";
 import { brl, formatDate } from "@/lib/format";
 
 const STATUS_COR: Record<string, string> = {
@@ -14,6 +14,7 @@ const STATUS_COR: Record<string, string> = {
 
 export function OrcamentosView({
   orcamentos,
+  projetos,
   reload,
   onNew,
   onEdit,
@@ -22,17 +23,19 @@ export function OrcamentosView({
   onDelete,
 }: {
   orcamentos: Orcamento[];
+  projetos: Projeto[];
   reload: () => void;
   onNew: () => void;
   onEdit: (o: Orcamento) => void;
   onView: (o: Orcamento) => void;
-  onConvert: (o: Orcamento) => void;
+  onConvert: (o: Orcamento, obraExistenteId: string | null) => void;
   onDelete: (o: Orcamento) => void;
 }) {
   const supabase = createClient();
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState("Todos");
   const [confirm, setConfirm] = useState<string | null>(null);
+  const [aprovando, setAprovando] = useState<Orcamento | null>(null);
 
   const visiveis = useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -158,7 +161,7 @@ export function OrcamentosView({
                 </select>
                 {!o.obra_id && (
                   <button
-                    onClick={() => onConvert(o)}
+                    onClick={() => setAprovando(o)}
                     className="t-colors rounded-lg border border-brand/40 px-3 py-1.5 text-sm font-medium text-brand hover:bg-brand-soft"
                   >
                     Aprovar projeto
@@ -196,6 +199,139 @@ export function OrcamentosView({
             </div>
           ))
         )}
+      </div>
+
+      {aprovando && (
+        <AprovarModal
+          orcamento={aprovando}
+          projetos={projetos}
+          onCancel={() => setAprovando(null)}
+          onConfirmar={(obraExistenteId) => {
+            onConvert(aprovando, obraExistenteId);
+            setAprovando(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function AprovarModal({
+  orcamento,
+  projetos,
+  onCancel,
+  onConfirmar,
+}: {
+  orcamento: Orcamento;
+  projetos: Projeto[];
+  onCancel: () => void;
+  onConfirmar: (obraExistenteId: string | null) => void;
+}) {
+  const [modo, setModo] = useState<"novo" | "existente">("novo");
+  const [busca, setBusca] = useState("");
+  const [selecionado, setSelecionado] = useState<string | null>(null);
+
+  const encontrados = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    const lista = q
+      ? projetos.filter(
+          (p) =>
+            p.cliente.toLowerCase().includes(q) ||
+            (p.projeto ?? "").toLowerCase().includes(q) ||
+            (p.engenharia ?? "").toLowerCase().includes(q)
+        )
+      : projetos;
+    return lista.slice(0, 30);
+  }, [projetos, busca]);
+
+  return (
+    <div className="fixed inset-0 z-[70] grid place-items-center bg-navy/60 p-4 backdrop-blur-sm" onClick={onCancel}>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md rounded-2xl glass-strong p-5 shadow-card sm:p-6"
+      >
+        <h3 className="font-display text-lg font-bold text-ink">Aprovar projeto</h3>
+        <p className="mt-1 text-sm text-ink-soft">
+          "{orcamento.titulo || orcamento.cliente_nome}" vai virar uma obra em Obras / Clientes. Pra qual pasta?
+        </p>
+
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={() => setModo("novo")}
+            className={`t-colors flex-1 rounded-lg border px-3 py-2.5 text-sm font-semibold ${
+              modo === "novo"
+                ? "border-brand bg-brand-soft text-brand-dark"
+                : "border-line text-ink-soft hover:bg-ink/5"
+            }`}
+          >
+            Obra e cliente novos
+          </button>
+          <button
+            onClick={() => setModo("existente")}
+            className={`t-colors flex-1 rounded-lg border px-3 py-2.5 text-sm font-semibold ${
+              modo === "existente"
+                ? "border-brand bg-brand-soft text-brand-dark"
+                : "border-line text-ink-soft hover:bg-ink/5"
+            }`}
+          >
+            Pasta já existente
+          </button>
+        </div>
+
+        {modo === "novo" ? (
+          <p className="mt-4 rounded-lg bg-canvas/60 px-3 py-2.5 text-xs text-ink-soft">
+            Cria um cliente novo (se ainda não existir com esse nome) e uma obra nova pra esse orçamento, e já
+            abre a pasta dela.
+          </p>
+        ) : (
+          <div className="mt-4">
+            <input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar por cliente, obra ou engenharia…"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2.5 text-sm text-ink"
+            />
+            <div className="mt-2 max-h-52 space-y-1 overflow-y-auto">
+              {encontrados.length === 0 ? (
+                <p className="px-2 py-3 text-center text-xs text-ink-faint">Nenhuma obra encontrada.</p>
+              ) : (
+                encontrados.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => setSelecionado(p.id)}
+                    className={`t-colors block w-full rounded-lg border px-3 py-2 text-left ${
+                      selecionado === p.id
+                        ? "border-brand bg-brand-soft"
+                        : "border-line hover:bg-ink/5"
+                    }`}
+                  >
+                    <p className="truncate text-sm font-semibold text-ink">{p.projeto || "Obra sem nome"}</p>
+                    <p className="truncate text-xs text-ink-faint">
+                      {p.cliente}
+                      {p.engenharia && ` · ${p.engenharia}`}
+                    </p>
+                  </button>
+                ))
+              )}
+            </div>
+            <p className="mt-2 text-[11px] text-ink-faint">
+              O orçamento fica vinculado a essa obra — não cria um cliente nem uma obra novos.
+            </p>
+          </div>
+        )}
+
+        <div className="mt-5 flex justify-end gap-3">
+          <button onClick={onCancel} className="rounded-lg px-4 py-2 text-sm font-medium text-ink-soft hover:bg-ink/5">
+            Cancelar
+          </button>
+          <button
+            disabled={modo === "existente" && !selecionado}
+            onClick={() => onConfirmar(modo === "existente" ? selecionado : null)}
+            className="t-colors rounded-lg bg-brand px-5 py-2 text-sm font-semibold text-white shadow-glow hover:bg-brand-dark disabled:opacity-60"
+          >
+            Confirmar aprovação
+          </button>
+        </div>
       </div>
     </div>
   );

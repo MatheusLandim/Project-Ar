@@ -222,7 +222,9 @@ export type TipoContaPagar =
   | "boleto"
   | "nota_fiscal"
   | "despesa_extra"
-  | "cartao_credito";
+  | "cartao_credito"
+  | "rt"
+  | "art";
 
 export type ContaPagar = {
   id: string;
@@ -332,7 +334,15 @@ export const TIPOS_CONTA_PAGAR: Record<TipoContaPagar, string> = {
   nota_fiscal: "Nota Fiscal",
   despesa_extra: "Despesa Extra",
   cartao_credito: "Cartão de Crédito",
+  rt: "RT",
+  art: "ART",
 };
+
+// Pastas padrão de cada obra — as mesmas que PastaObra.tsx cria sozinha
+// (Aprovação fica de fora aqui: não é onde anexo de lançamento financeiro
+// deveria cair). Usado pra manter o nome batendo com o que o relatório
+// procura (RelatorioFinanceiroDoc.tsx).
+export const PASTAS_OBRA_CONTABEIS = ["Boleto", "Notas Fiscais e Recibos", "Comprovantes"];
 
 export const TIPOS_CONTA_RECEBER: Record<TipoContaReceber, string> = {
   boleto: "Boleto",

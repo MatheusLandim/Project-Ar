@@ -244,7 +244,19 @@ export default function DashboardClient({ userEmail, userId }: { userEmail: stri
     await load();
   }
 
-  async function converterOrcamento(o: Orcamento) {
+  async function converterOrcamento(o: Orcamento, obraExistenteId: string | null) {
+    if (obraExistenteId) {
+      // Vincula o orçamento a uma obra que já existe — não cria cliente
+      // nem obra novos, só liga esse orçamento a essa pasta.
+      await supabase
+        .from("orcamentos")
+        .update({ obra_id: obraExistenteId, status: "Aprovado" })
+        .eq("id", o.id);
+      await load();
+      setView("clientes");
+      setObraParaAbrir(obraExistenteId);
+      return;
+    }
     const cliente_id = await resolverClienteId(o.cliente_nome);
     const { data } = await supabase
       .from("projetos")
@@ -381,12 +393,14 @@ export default function DashboardClient({ userEmail, userId }: { userEmail: stri
               onEdit={editarCliente}
               onDelete={excluirCliente}
               onAtualizarObra={atualizarObra}
+              reload={load}
               obraParaAbrir={obraParaAbrir}
               onObraAberta={() => setObraParaAbrir(null)}
             />
           ) : view === "orcamentos" ? (
             <OrcamentosView
               orcamentos={orcamentos}
+              projetos={projetos}
               reload={load}
               onNew={novoOrcamento}
               onEdit={editarOrcamento}
