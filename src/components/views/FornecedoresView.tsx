@@ -24,10 +24,21 @@ function FornecedorCard({
   onCancelarExcluir: () => void;
 }) {
   return (
-    <div className="rounded-2xl border border-line glass p-4 shadow-card sm:p-5">
+    <div
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData("text/plain", f.id);
+        e.dataTransfer.effectAllowed = "move";
+      }}
+      className="t-colors cursor-grab rounded-2xl border border-line glass p-4 shadow-card active:cursor-grabbing sm:p-5"
+      title="Arraste pra outra seção pra mudar o tipo da pasta"
+    >
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
         <button onClick={onAbrirPasta} className="min-w-0 flex-1 text-left">
-          <h3 className="font-display text-base font-bold text-ink hover:text-brand">{f.nome}</h3>
+          <h3 className="font-display text-base font-bold text-ink hover:text-brand">
+            <span className="mr-1.5 text-ink-faint">⠿</span>
+            {f.nome}
+          </h3>
           <p className="mt-0.5 text-xs text-ink-soft">
             {[f.categoria, f.cnpj_cpf].filter(Boolean).join(" · ") || "Sem dados adicionais"}
           </p>
@@ -76,6 +87,7 @@ function FornecedorCard({
 
 function Secao({
   titulo,
+  tipoSecao,
   destaque,
   busca,
   onBusca,
@@ -86,8 +98,10 @@ function Secao({
   confirmandoId,
   setConfirmandoId,
   onExcluir,
+  onMoverPara,
 }: {
   titulo: string;
+  tipoSecao: TipoPasta;
   destaque?: boolean;
   busca: string;
   onBusca: (v: string) => void;
@@ -98,9 +112,28 @@ function Secao({
   confirmandoId: string | null;
   setConfirmandoId: (id: string | null) => void;
   onExcluir: (f: Fornecedor) => void;
+  onMoverPara: (fornecedorId: string, novoTipo: TipoPasta) => void;
 }) {
+  const [arrastandoEmCima, setArrastandoEmCima] = useState(false);
+
   return (
-    <div className={destaque ? "rounded-2xl border-2 border-brand/30 bg-brand-soft/20 p-4 sm:p-5" : ""}>
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setArrastandoEmCima(true);
+      }}
+      onDragLeave={() => setArrastandoEmCima(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setArrastandoEmCima(false);
+        const id = e.dataTransfer.getData("text/plain");
+        if (id) onMoverPara(id, tipoSecao);
+      }}
+      className={`t-colors rounded-2xl ${
+        destaque ? "border-2 border-brand/30 bg-brand-soft/20 p-4 sm:p-5" : ""
+      } ${arrastandoEmCima ? "outline outline-2 outline-dashed outline-brand/60" : ""}`}
+    >
       <h2 className={`font-display font-bold text-ink ${destaque ? "text-xl" : "text-base"}`}>{titulo}</h2>
       <input
         value={busca}
@@ -110,8 +143,14 @@ function Secao({
       />
       <div className="mt-3 space-y-3">
         {lista.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-line glass p-8 text-center">
-            <p className="text-sm text-ink-soft">{vazioTexto}</p>
+          <div
+            className={`rounded-2xl border border-dashed p-8 text-center ${
+              arrastandoEmCima ? "border-brand/50 bg-brand-soft/30" : "border-line glass"
+            }`}
+          >
+            <p className="text-sm text-ink-soft">
+              {arrastandoEmCima ? "Solta aqui pra mover pra esta seção" : vazioTexto}
+            </p>
           </div>
         ) : (
           lista.map((f) => (
@@ -175,6 +214,13 @@ export function FornecedoresView() {
     await load();
   }
 
+  async function moverPara(fornecedorId: string, novoTipo: TipoPasta) {
+    const atual = fornecedores.find((f) => f.id === fornecedorId);
+    if (!atual || atual.tipo_pasta === novoTipo) return;
+    await supabase.from("fornecedores").update({ tipo_pasta: novoTipo }).eq("id", fornecedorId);
+    await load();
+  }
+
   function filtrar(lista: Fornecedor[], q: string) {
     const termo = q.trim().toLowerCase();
     if (!termo) return lista;
@@ -225,8 +271,8 @@ export function FornecedoresView() {
     <div className="animate-fade-up space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-md text-sm text-ink-soft">
-          Cada pasta guarda documentos organizados por ano e mês. As de despesa fixa ficam em
-          destaque no topo; abaixo, as de despesa variável.
+          Cada pasta guarda documentos organizados por ano e mês. Arraste uma pasta pra outra seção
+          pra mudar o tipo dela (fixa, variável ou recebimento recorrente).
         </p>
         <div className="flex flex-wrap gap-2">
           <button
@@ -252,6 +298,7 @@ export function FornecedoresView() {
 
       <Secao
         titulo="Despesas fixas"
+        tipoSecao="fixa"
         destaque
         busca={buscaFixas}
         onBusca={setBuscaFixas}
@@ -262,11 +309,13 @@ export function FornecedoresView() {
         confirmandoId={confirmandoId}
         setConfirmandoId={setConfirmandoId}
         onExcluir={excluir}
+        onMoverPara={moverPara}
       />
 
       <div>
         <Secao
           titulo="Despesas variáveis"
+          tipoSecao="variavel"
           busca={buscaVariaveis}
           onBusca={setBuscaVariaveis}
           lista={variaveis}
@@ -276,11 +325,13 @@ export function FornecedoresView() {
           confirmandoId={confirmandoId}
           setConfirmandoId={setConfirmandoId}
           onExcluir={excluir}
+          onMoverPara={moverPara}
         />
 
         <div className="mt-6 border-t border-line pt-6">
           <Secao
             titulo="Recebimentos recorrentes"
+            tipoSecao="receita_recorrente"
             busca={buscaRecorrentes}
             onBusca={setBuscaRecorrentes}
             lista={recorrentes}
@@ -290,6 +341,7 @@ export function FornecedoresView() {
             confirmandoId={confirmandoId}
             setConfirmandoId={setConfirmandoId}
             onExcluir={excluir}
+            onMoverPara={moverPara}
           />
         </div>
       </div>

@@ -973,7 +973,9 @@ function ContasPagarTab({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-ink">
                       {c.descricao}
-                      <span className="font-normal text-ink-faint"> · {TIPOS_CONTA_PAGAR[c.tipo]}</span>
+                      {c.tipo !== "rt" && c.tipo !== "art" && (
+                        <span className="font-normal text-ink-faint"> · {TIPOS_CONTA_PAGAR[c.tipo]}</span>
+                      )}
                     </p>
                     <p className="text-xs text-ink-soft">
                       {nomeFornecedor(c.fornecedor_id)} · vence {formatDate(c.vencimento)}
@@ -983,19 +985,12 @@ function ContasPagarTab({
                   </div>
                   <span className="tnum text-sm font-semibold text-ink">{brl(Number(c.valor))}</span>
                   <StatusBadge status={st} kind="pagamento" />
-                  <button
-                    onClick={() => onBaixar(c)}
-                    className={`t-colors rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
-                      c.data_pagamento ? "text-ink-soft hover:bg-ink/5" : "bg-emerald-600 text-white hover:bg-emerald-700"
-                    }`}
-                  >
-                    {c.data_pagamento ? "Reabrir" : "Pagar"}
-                  </button>
                   <BotaoMenu
                     onAbrir={(pos) =>
                       setMenu({
                         ...pos,
                         opcoes: [
+                          { label: c.data_pagamento ? "Reabrir" : "Marcar como pago", onClick: () => onBaixar(c) },
                           { label: "Anexos", onClick: () => onAbrirAnexos(c) },
                           ...(c.fornecedor_id || c.despesa_fixa_id
                             ? [{ label: "Abrir pasta", onClick: () => onAbrirPasta(c) }]
@@ -1055,6 +1050,8 @@ function ContasReceberTab({
   const [filtro, setFiltro] = useState<"todos" | "atrasado" | "pendente" | "pago">("todos");
   const lista = todasLinhas.filter((l) => filtro === "todos" || l.status === filtro);
   const [mostrarRecorrentes, setMostrarRecorrentes] = useState(false);
+  const [menu, setMenu] = useState<MenuContextoState | null>(null);
+  useFecharMenuAoClicarFora(!!menu, () => setMenu(null));
 
   return (
     <div>
@@ -1091,7 +1088,28 @@ function ContasReceberTab({
         ) : (
           <ul className="divide-y divide-line">
             {lista.map((l) => (
-              <li key={`${l.origem}-${l.id}`} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-5">
+              <li
+                key={`${l.origem}-${l.id}`}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setMenu({
+                    x: e.clientX,
+                    y: e.clientY,
+                    opcoes: [
+                      { label: l.dataRecebimento ? "Reabrir" : "Marcar como recebido", onClick: () => onBaixar(l) },
+                      { label: "Anexos", onClick: () => onAbrirAnexos(l) },
+                      ...(l.clienteId || l.fornecedorId
+                        ? [{ label: "Abrir pasta", onClick: () => onAbrirPasta(l) }]
+                        : []),
+                      ...(l.origem === "receber"
+                        ? [{ label: "Editar", onClick: () => onEdit(l) }]
+                        : []),
+                      { label: "Excluir", tone: "danger" as const, onClick: () => onDelete(l) },
+                    ],
+                  });
+                }}
+                className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-5"
+              >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-ink">
                     {l.titulo}
@@ -1107,41 +1125,30 @@ function ContasReceberTab({
                 </div>
                 <span className="tnum text-sm font-semibold text-ink">{brl(l.valor)}</span>
                 <StatusBadge status={l.status} kind="pagamento" />
-                <button
-                  onClick={() => onAbrirAnexos(l)}
-                  title="Anexos deste lançamento (comprovante, boleto, nota)"
-                  className="t-colors rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5"
-                >
-                  📎
-                </button>
-                {l.clienteId && (
-                  <button
-                    onClick={() => onAbrirPasta(l)}
-                    title="Abrir pasta do cliente"
-                    className="t-colors rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5"
-                  >
-                    📁
-                  </button>
-                )}
-                <button
-                  onClick={() => onBaixar(l)}
-                  className={`t-colors rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
-                    l.dataRecebimento ? "text-ink-soft hover:bg-ink/5" : "bg-emerald-600 text-white hover:bg-emerald-700"
-                  }`}
-                >
-                  {l.dataRecebimento ? "Reabrir" : "Receber"}
-                </button>
-                {l.origem === "receber" ? (
-                  <button onClick={() => onEdit(l)} className="rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5">✎</button>
-                ) : (
-                  <span className="px-1 text-xs text-ink-faint" title="Edite pela obra, em Obras">✎</span>
-                )}
-                <button onClick={() => onDelete(l)} className="rounded-lg px-2 py-1.5 text-xs text-rose-500 hover:bg-rose-500/10">🗑</button>
+                <BotaoMenu
+                  onAbrir={(pos) =>
+                    setMenu({
+                      ...pos,
+                      opcoes: [
+                        { label: l.dataRecebimento ? "Reabrir" : "Marcar como recebido", onClick: () => onBaixar(l) },
+                        { label: "Anexos", onClick: () => onAbrirAnexos(l) },
+                        ...(l.clienteId || l.fornecedorId
+                          ? [{ label: "Abrir pasta", onClick: () => onAbrirPasta(l) }]
+                          : []),
+                        ...(l.origem === "receber"
+                          ? [{ label: "Editar", onClick: () => onEdit(l) }]
+                          : []),
+                        { label: "Excluir", tone: "danger" as const, onClick: () => onDelete(l) },
+                      ],
+                    })
+                  }
+                />
               </li>
             ))}
           </ul>
         )}
       </div>
+      {menu && <ContextMenu menu={menu} onFechar={() => setMenu(null)} />}
     </div>
   );
 }
@@ -1161,6 +1168,9 @@ function ProLaboreTab({
   onDelete: (p: ProLabore) => void;
   onAbrirComprovante: (p: ProLabore) => void;
 }) {
+  const [menu, setMenu] = useState<MenuContextoState | null>(null);
+  useFecharMenuAoClicarFora(!!menu, () => setMenu(null));
+
   return (
     <div>
       <div className="flex justify-end">
@@ -1174,7 +1184,21 @@ function ProLaboreTab({
         ) : (
           <ul className="divide-y divide-line">
             {registros.map((p) => (
-              <li key={p.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-5">
+              <li
+                key={p.id}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setMenu({
+                    x: e.clientX,
+                    y: e.clientY,
+                    opcoes: [
+                      { label: "Editar", onClick: () => onEdit(p) },
+                      { label: "Excluir", tone: "danger", onClick: () => onDelete(p) },
+                    ],
+                  });
+                }}
+                className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-5"
+              >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-ink">{labelMesReferencia(p.mes_referencia)}</p>
                   <p className="text-xs text-ink-soft">
@@ -1189,13 +1213,23 @@ function ProLaboreTab({
                   </p>
                 </div>
                 <span className="tnum text-sm font-semibold text-ink">{brl(Number(p.valor))}</span>
-                <button onClick={() => onEdit(p)} className="rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5">✎</button>
-                <button onClick={() => onDelete(p)} className="rounded-lg px-2 py-1.5 text-xs text-rose-500 hover:bg-rose-500/10">🗑</button>
+                <BotaoMenu
+                  onAbrir={(pos) =>
+                    setMenu({
+                      ...pos,
+                      opcoes: [
+                        { label: "Editar", onClick: () => onEdit(p) },
+                        { label: "Excluir", tone: "danger", onClick: () => onDelete(p) },
+                      ],
+                    })
+                  }
+                />
               </li>
             ))}
           </ul>
         )}
       </div>
+      {menu && <ContextMenu menu={menu} onFechar={() => setMenu(null)} />}
     </div>
   );
 }
@@ -1344,13 +1378,6 @@ function DespesasFixasTab({
                 <span className="tnum text-sm font-semibold text-ink">
                   {d.valor != null ? brl(Number(d.valor)) : "valor variável"}
                 </span>
-                <button
-                  onClick={() => onAbrirPasta(d)}
-                  title="Ver pasta desta despesa (organizada por ano/mês)"
-                  className="t-colors rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5"
-                >
-                  📁
-                </button>
                 <BotaoMenu
                   onAbrir={(pos) =>
                     setMenu({
@@ -1446,13 +1473,6 @@ function ReceitasRecorrentesTab({
                 <span className="tnum text-sm font-semibold text-ink">
                   {r.valor != null ? brl(Number(r.valor)) : "valor variável"}
                 </span>
-                <button
-                  onClick={() => onAbrirPasta(r)}
-                  title="Ver pasta deste recebimento (organizada por ano/mês)"
-                  className="t-colors rounded-lg px-2 py-1.5 text-xs text-ink-soft hover:bg-ink/5"
-                >
-                  📁
-                </button>
                 <BotaoMenu
                   onAbrir={(pos) =>
                     setMenu({

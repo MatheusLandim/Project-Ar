@@ -109,6 +109,7 @@ export function RtView({
           vencimento: hoje(),
           data_pagamento: hoje(),
           mes_competencia: mesReferenciaAtual(),
+          observacoes: l.obs,
         });
       }
     } else {

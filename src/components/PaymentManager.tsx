@@ -20,6 +20,17 @@ export function PaymentManager({
   const [venc, setVenc] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Configuração rápida do plano de pagamento (só aparece antes de ter
+  // qualquer parcela lançada, pra não bagunçar um plano já em andamento)
+  const [modoPlano, setModoPlano] = useState<"avista" | "sinal" | null>(null);
+  const [pVista, setPVista] = useState(String(projeto.valor_total ?? ""));
+  const [pVistaData, setPVistaData] = useState("");
+  const [pSinal, setPSinal] = useState("");
+  const [pSinalData, setPSinalData] = useState("");
+  const [pConclusao, setPConclusao] = useState("");
+  const [pConclusaoData, setPConclusaoData] = useState("");
+  const [criandoPlano, setCriandoPlano] = useState(false);
+
   const pagamentos = [...projeto.pagamentos].sort((a, b) =>
     (a.data_vencimento ?? "").localeCompare(b.data_vencimento ?? "")
   );
@@ -42,6 +53,45 @@ export function PaymentManager({
     setVenc("");
     setAdding(false);
     setBusy(false);
+    onChanged();
+  }
+
+  async function criarPlanoAVista(e: React.FormEvent) {
+    e.preventDefault();
+    setCriandoPlano(true);
+    await supabase.from("pagamentos").insert({
+      projeto_id: projeto.id,
+      descricao: "À vista",
+      valor: Number(pVista) || 0,
+      data_vencimento: pVistaData || null,
+      data_pagamento: null,
+    });
+    setModoPlano(null);
+    setCriandoPlano(false);
+    onChanged();
+  }
+
+  async function criarPlanoSinalConclusao(e: React.FormEvent) {
+    e.preventDefault();
+    setCriandoPlano(true);
+    await supabase.from("pagamentos").insert([
+      {
+        projeto_id: projeto.id,
+        descricao: "Sinal",
+        valor: Number(pSinal) || 0,
+        data_vencimento: pSinalData || null,
+        data_pagamento: null,
+      },
+      {
+        projeto_id: projeto.id,
+        descricao: "Conclusão",
+        valor: Number(pConclusao) || 0,
+        data_vencimento: pConclusaoData || null,
+        data_pagamento: null,
+      },
+    ]);
+    setModoPlano(null);
+    setCriandoPlano(false);
     onChanged();
   }
 
@@ -82,10 +132,120 @@ export function PaymentManager({
       </div>
 
       {pagamentos.length === 0 && !adding && (
-        <p className="py-2 text-sm text-ink-soft">
-          Nenhum recebimento lançado. Cadastre as parcelas ou a entrada deste
-          projeto.
-        </p>
+        <div className="mb-3 rounded-lg border border-dashed border-brand/40 bg-brand-soft/20 p-3">
+          <p className="text-sm font-semibold text-ink">Como é o pagamento desta obra?</p>
+          <p className="mt-0.5 text-xs text-ink-soft">
+            Escolhe o formato e já lança certinho — depois é só preencher as datas de previsão e marcar
+            como recebido quando cair.
+          </p>
+          {!modoPlano ? (
+            <div className="mt-2.5 flex gap-2">
+              <button
+                onClick={() => setModoPlano("avista")}
+                className="t-colors flex-1 rounded-lg border border-line px-3 py-2 text-sm font-semibold text-ink-soft hover:bg-ink/5"
+              >
+                À vista
+              </button>
+              <button
+                onClick={() => setModoPlano("sinal")}
+                className="t-colors flex-1 rounded-lg border border-line px-3 py-2 text-sm font-semibold text-ink-soft hover:bg-ink/5"
+              >
+                Sinal + Conclusão
+              </button>
+            </div>
+          ) : modoPlano === "avista" ? (
+            <form onSubmit={criarPlanoAVista} className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                required
+                value={pVista}
+                onChange={(e) => setPVista(e.target.value)}
+                placeholder="Valor à vista"
+                className="tnum rounded-md border border-line bg-surface px-2.5 py-2 text-sm text-ink"
+              />
+              <input
+                type="date"
+                value={pVistaData}
+                onChange={(e) => setPVistaData(e.target.value)}
+                placeholder="Previsão (opcional)"
+                className="rounded-md border border-line bg-surface px-2.5 py-2 text-sm text-ink"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={criandoPlano}
+                  className="t-colors flex-1 rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60"
+                >
+                  {criandoPlano ? "Criando…" : "Criar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModoPlano(null)}
+                  className="t-colors rounded-md px-2 py-2 text-sm text-ink-soft hover:bg-ink/5"
+                >
+                  ✕
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={criarPlanoSinalConclusao} className="mt-2.5 space-y-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  required
+                  value={pSinal}
+                  onChange={(e) => setPSinal(e.target.value)}
+                  placeholder="Valor do sinal"
+                  className="tnum rounded-md border border-line bg-surface px-2.5 py-2 text-sm text-ink"
+                />
+                <input
+                  type="date"
+                  value={pSinalData}
+                  onChange={(e) => setPSinalData(e.target.value)}
+                  placeholder="Previsão do sinal"
+                  className="rounded-md border border-line bg-surface px-2.5 py-2 text-sm text-ink"
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  required
+                  value={pConclusao}
+                  onChange={(e) => setPConclusao(e.target.value)}
+                  placeholder="Valor da conclusão"
+                  className="tnum rounded-md border border-line bg-surface px-2.5 py-2 text-sm text-ink"
+                />
+                <input
+                  type="date"
+                  value={pConclusaoData}
+                  onChange={(e) => setPConclusaoData(e.target.value)}
+                  placeholder="Previsão da conclusão"
+                  className="rounded-md border border-line bg-surface px-2.5 py-2 text-sm text-ink"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={criandoPlano}
+                  className="t-colors flex-1 rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60 sm:flex-none"
+                >
+                  {criandoPlano ? "Criando…" : "Criar sinal + conclusão"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModoPlano(null)}
+                  className="t-colors rounded-md px-2 py-2 text-sm text-ink-soft hover:bg-ink/5"
+                >
+                  ✕
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
       )}
 
       <ul className="divide-y divide-line">
